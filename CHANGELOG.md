@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Keep the bar cloud at full theme opacity in every state, including pause,
+  offline and power-off; remove its hover tooltip.
+- Pipe clipboard text to wl-copy over stdin so private logs, paths and copied
+  credentials never appear in shell or clipboard process arguments.
+
 ## 0.3.0
 
 - Follow the live Omarchy bar palette instead of forcing a white cloud icon.

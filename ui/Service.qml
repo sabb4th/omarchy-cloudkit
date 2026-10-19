@@ -318,7 +318,25 @@ Item {
     if (url) openPath(url)
   }
   function copyText(text) {
-    Quickshell.execDetached(["bash", "-c", 'printf %s "$1" | wl-copy', "bash", String(text || "")])
+    var process = clipboardProcess.createObject(root, { payload: String(text || "") })
+    process.running = true
+  }
+
+  // Clipboard contents may include private paths, logs or client credentials.
+  // Send them through a pipe; process arguments contain only the fixed command.
+  Component {
+    id: clipboardProcess
+    Process {
+      property string payload: ""
+      command: ["wl-copy"]
+      stdinEnabled: true
+      onStarted: {
+        write(payload)
+        payload = ""
+        stdinEnabled = false
+      }
+      onExited: destroy()
+    }
   }
 
   // ---- connection management

@@ -28,7 +28,7 @@ Item {
   readonly property real preferredHeight: currentView === "drives"
                                           ? drivesCol.implicitHeight + footerGap + footer.implicitHeight
                                           : viewCol.implicitHeight
-  // The one thing worth knowing right now; the bar tooltip keeps the full summary
+  // The panel keeps the status details; the bar has no hover popup.
   readonly property string headline: {
     var s = service
     if (!s.connected || s.engine.state !== "running" || !s.hasDrives) return s.statusText

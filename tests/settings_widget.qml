@@ -7,6 +7,11 @@ import "gui" as G
 ShellRoot {
   id: root
   property int phase: 0
+  G.CloudIcon {
+    id: barCloud
+    monochrome: true
+    color: Commons.Color.foreground
+  }
   function check(value, message) { if (!value) throw new Error(message) }
   function find(item, name) {
     if (item.objectName === name) return item
@@ -95,6 +100,22 @@ ShellRoot {
           root.check(backend.lastFolder.remote === "Example" && backend.lastFolder.path === "Thinkpad/Documents" && backend.lastFolder.local === "~/Documents", "folder mapping was incorrect")
           root.check(!settings.addingFolder, "folder form stayed busy")
           Commons.Color.foreground = "#e8b45a"
+          var states = [
+            {active: false, busy: false, badge: "Ⅱ"},
+            {active: false, busy: false, badge: "⏻"},
+            {active: false, busy: false, badge: "!"},
+            {active: true, busy: false, badge: ""},
+            {active: true, busy: true, badge: ""}
+          ]
+          for (var i = 0; i < states.length; i++) {
+            barCloud.active = states[i].active
+            barCloud.busy = states[i].busy
+            barCloud.badge = states[i].badge
+            root.check(barCloud.children[0].opacity === 1, "bar cloud was dimmed in state " + i)
+            root.check(String(barCloud.children[0].color) === "#e8b45a", "bar cloud ignored the theme")
+            root.check(String(barCloud.children[1].color) === "#e8b45a", "spinner ignored the theme")
+            root.check(String(barCloud.children[2].color) === "#e8b45a", "badge ignored the theme")
+          }
           root.phase = 1
         } else {
           root.check(String(settings.foreground) === "#e8b45a", "settings did not follow live theme color")

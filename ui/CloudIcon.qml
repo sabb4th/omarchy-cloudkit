@@ -29,7 +29,7 @@ Item {
     color: root.color
     font.family: root.fontFamily
     font.pixelSize: root.iconSize
-    opacity: root.busy ? (root.active ? 0.5 : 0.35) : (root.active ? 1.0 : 0.65)
+    opacity: root.monochrome ? 1.0 : (root.busy ? (root.active ? 0.5 : 0.35) : (root.active ? 1.0 : 0.65))
     Behavior on opacity { NumberAnimation { duration: 150 } }
   }
 

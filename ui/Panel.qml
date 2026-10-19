@@ -4,7 +4,6 @@ import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
-import "Model.js" as Model
 
 Panel {
   id: root
@@ -40,19 +39,6 @@ Panel {
     if (paused) return "paused"
     if (pending) return "pending"
     return service.statusState === "online" ? "synced" : "idle"
-  }
-
-  readonly property string barTooltipText: {
-    if (!service.powered || service.powerChanging) return service.statusText
-    if (!service.connected) return "Clouds: " + (service.startError || "starting…")
-    if (service.actionFailed && service.lastError !== "") return "Clouds: " + service.lastError
-    if (!service.hasDrives) return "Clouds: click to connect a drive"
-    var t = "Clouds: " + service.statusText
-    if (root.cloudState === "paused") t += " · paused folders"
-    if (root.cloudState === "pending") t += " · changes pending"
-    if (service.transfers.count > 0 && service.transfers.speed > 0) t += " · " + Model.formatSpeed(service.transfers.speed)
-    if (service.summary.attention > 0) t += " · " + service.summary.attention + " need attention"
-    return t
   }
 
   implicitWidth: button.implicitWidth
@@ -94,7 +80,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: root.barTooltipText
+    tooltipText: ""
 
     iconComponent: Component {
       Item {

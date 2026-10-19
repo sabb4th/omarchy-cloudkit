@@ -22,6 +22,8 @@ streaming, FUSE mounts, bidirectional offline folder sync, and a QML bar panel.
 The global power switch stops background processes and persists across sessions.
 Notification process arguments contain only fixed generic text; private filenames
 and errors stay in the authenticated panel/private state.
+Clipboard text is piped to wl-copy through stdin so copied logs and credentials
+are not exposed in process arguments.
 Version 0.3.0 follows the live bar theme and exposes folder mapping, cache,
 parallelism and optional login service controls in a sectioned settings panel.
 
@@ -31,7 +33,7 @@ Please apply the manual-setup label. The installer compiles Rust locally and can
 install missing Arch packages using pacman via sudo/pkexec. Runtime dependencies,
 file/network access, update and removal instructions are documented in README.md
 and docs/MARKETPLACE.md. This is an early development release; it does not offer
-upload-only backup or claim security certification. No preview is submitted.
+upload-only backup or claim security certification. The repository includes a root preview.png.
 
 ### Submission checklist
 

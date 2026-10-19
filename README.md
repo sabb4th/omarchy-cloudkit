@@ -9,7 +9,9 @@ nuvem simples quando ocioso,
 check quando saudável, rotação durante sincronização, seta de envio para uploads
 do streaming, pausa (Ⅱ), alterações pendentes (…), offline (×), erro (!) e desligado (⏻).
 A sincronização bidirecional usa um indicador comum de atividade; o serviço
-não informa a direção de cada transferência. Detalhes ficam no tooltip e painel.
+não informa a direção de cada transferência. A nuvem mantém a cor e a opacidade
+do tema em todos os estados, inclusive em pausa. Não abre tooltip ao passar o
+mouse; os detalhes ficam no painel, aberto por clique.
 
 Esta é uma migração em desenvolvimento. Os fluxos locais de montagem e
 sincronização foram exercitados com rclone real. Login OAuth e operações em

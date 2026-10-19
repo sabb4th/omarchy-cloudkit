@@ -40,6 +40,25 @@ The installer preserves the manager's .git directory. See README for removal.
 
 ## Submission
 
+### Review feedback
+
+The [existing submission](https://github.com/omacom/omarchy-plugin-marketplace/issues/12154)
+passed structure and Quattro compatibility checks at commit `59b6630`.
+The baseline reported no findings and requires maintainer review for the
+documented build, installer, package, privilege and service capabilities.
+These capabilities are not a request to remove the installer or bypass review.
+
+The two privacy reports are addressed in the runtime source:
+
+- Conflict notifications use the fixed `jobs::Notification` variants; private
+  filenames and errors stay in private state and the authenticated panel.
+- Clipboard actions send text to `wl-copy` through stdin, including copied logs
+  and client credentials. No shell interpolates that text or puts it in argv.
+  A real-QML regression test checks Unicode, multiline and large clipboard data.
+
+Local changes still need publication and a new exact-commit validation. This
+document does not assert marketplace approval or verified status.
+
 The completed draft is [MARKETPLACE-SUBMISSION.md](MARKETPLACE-SUBMISSION.md).
 The owner must review the title and body, including the five checklist statements,
 before submitting it. No listing approval or security certification is claimed.
