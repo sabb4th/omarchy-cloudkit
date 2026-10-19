@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-PLUGIN_ID = "local.cloudkit"
+PLUGIN_ID = "sabb4th.cloudkit"
 
 
 class InstallerTests(unittest.TestCase):
@@ -70,6 +70,27 @@ class InstallerTests(unittest.TestCase):
     def assert_data_preserved(self) -> None:
         for path in self.sentinels:
             self.assertEqual(path.read_text(), "preserve me\n", str(path))
+
+    def test_marketplace_in_place_preserves_git_checkout(self) -> None:
+        import shutil
+        shutil.copytree(REPO, self.plugin, ignore=shutil.ignore_patterns("target", ".git"))
+        (self.plugin / ".git").mkdir()
+        sentinel = self.plugin / ".git/HEAD"
+        sentinel.write_text("ref: refs/heads/main\n")
+        result = subprocess.run(
+            ["bash", str(self.plugin / "install.sh"), "--in-place", "--no-build", "--no-install-deps", "--no-enable"],
+            env=self.env, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(sentinel.read_text(), "ref: refs/heads/main\n")
+        self.assertEqual(self.shortcut.resolve(), self.plugin / "bin/omarchy-cloudkit")
+        self.assertFalse((self.plugin / ".cloudkit-install").exists())
+        self.assert_data_preserved()
+
+    def test_in_place_refuses_a_different_checkout(self) -> None:
+        self.install("--in-place", success=False)
+        self.assertFalse(self.plugin.exists())
+        self.assert_data_preserved()
 
     def test_copy_update_and_remove_shortcut(self) -> None:
         self.install("--no-enable")

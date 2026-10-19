@@ -255,6 +255,7 @@ impl Core {
             Ok(v) => (v["job"].clone(), v["stats"].clone(), String::new()),
             Err(e) => (json!({}), json!({}), e),
         };
+        let intentional_cancel = self.stopping && error.starts_with("Sync cancelled;");
         let output = text(&js["output"]["output"]);
         let blob = format!("{}\n{}\n{}", text(&js["error"]), error, output);
         let lower = blob.to_lowercase();
@@ -324,7 +325,14 @@ impl Core {
             );
             let detail = detail.chars().take(600).collect::<String>();
             let mut attention = None;
-            if lower.contains("missing_local:") {
+            if intentional_cancel {
+                // Power-off is not a failed initial sync or repair. Preserve its
+                // initialization/recovery flags so the next start can finish it.
+                f["error"] = json!("");
+                f["error_kind"] = json!("");
+                f["retry_at"] = json!(0);
+                f["backoff"] = json!(0);
+            } else if lower.contains("missing_local:") {
                 attention = Some(("missing_local", detail));
             } else if lower.contains("run with --force")
                 || lower.contains("too many deletes")
@@ -399,7 +407,12 @@ impl Core {
             log(
                 &self.m.paths,
                 &format!(
-                    "Sync {id} failed: {}",
+                    "Sync {id} {}: {}",
+                    if intentional_cancel {
+                        "suspended"
+                    } else {
+                        "failed"
+                    },
                     safe(&blob).chars().take(1000).collect::<String>()
                 ),
             );
@@ -622,6 +635,36 @@ impl Core {
             "touch" => {
                 self.recent_at = 0.0;
                 Ok(json!({}))
+            }
+            "power_off" => {
+                if !self.mounting.is_empty() {
+                    return Err(
+                        "A drive is mounting or unmounting; wait before switching off".into(),
+                    );
+                }
+                // Check the VFS directly: the displayed metrics can be stale. Never
+                // stop an engine with dirty streaming cache without explicit force.
+                if let Some(rcc) = &self.rc {
+                    for (name, drive) in &self.m.drives {
+                        if drive["mount_state"] == "mounted" {
+                            let stats = rcc
+                                .call_timeout("vfs/stats", json!({"fs":format!("{name}:")}), 5)
+                                .await?;
+                            let cache = &stats["diskCache"];
+                            if cache["uploadsInProgress"].as_u64().unwrap_or(0)
+                                + cache["uploadsQueued"].as_u64().unwrap_or(0)
+                                > 0
+                            {
+                                return Err(
+                                    "Files are still uploading; wait before switching off".into()
+                                );
+                            }
+                        }
+                    }
+                }
+                self.m.paths.set_enabled(false)?;
+                self.stopping = true;
+                Ok(json!({"message":"Stopping CloudKit and rclone; settings are preserved"}))
             }
             "shutdown" => {
                 self.stopping = true;
@@ -1540,6 +1583,10 @@ async fn connection(
 }
 pub async fn run() -> Result<()> {
     let paths = Paths::new();
+    // A disabled login service must exit successfully instead of restarting.
+    if !paths.enabled()? {
+        return Ok(());
+    }
     ipc::private_runtime(&paths.runtime).map_err(|e| e.to_string())?;
     let lock = fs::OpenOptions::new()
         .read(true)
@@ -1551,6 +1598,10 @@ pub async fn run() -> Result<()> {
         .map_err(|e| e.to_string())?;
     if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
         return Err("A cloud daemon is already running for this profile".into());
+    }
+    // Recheck after taking the daemon lock, in case power changed during startup.
+    if !paths.enabled()? {
+        return Ok(());
     }
     let m = Model::new(paths.clone())?;
     tokio::fs::create_dir_all(m.local_root())
@@ -1740,6 +1791,48 @@ mod tests {
             let _ = fs::remove_dir_all(&self.root);
         }
     }
+    #[tokio::test]
+    async fn global_power_preserves_preferences_and_refuses_mount_transitions() {
+        let mut f = Fixture::new();
+        let config = f.core.m.cfg.clone();
+        let mut reply = None;
+        f.core.mounting.push("Cloud".into());
+        assert!(
+            f.core
+                .execute("power_off", json!({}), &mut reply)
+                .await
+                .is_err()
+        );
+        assert!(f.core.m.paths.enabled().unwrap());
+        assert!(!f.core.stopping);
+        f.core.mounting.clear();
+        f.core
+            .execute("power_off", json!({}), &mut reply)
+            .await
+            .unwrap();
+        assert!(f.core.stopping);
+        assert!(!f.core.m.paths.enabled().unwrap());
+        assert_eq!(f.core.m.cfg, config);
+    }
+
+    #[tokio::test]
+    async fn power_off_during_initial_sync_does_not_become_a_failed_repair() {
+        let mut f = Fixture::new();
+        f.core.stopping = true;
+        f.core.m.folders.get_mut("f1").unwrap()["initialized"] = json!(false);
+        f.core.m.folders.get_mut("f1").unwrap()["run_resync"] = json!(true);
+        f.core.finish_sync(
+            "f1",
+            Err("Sync cancelled; existing state will be recovered on the next run".into()),
+        );
+        let folder = &f.core.m.folders["f1"];
+        assert_eq!(folder["initialized"], false);
+        assert_eq!(folder["attention"], "");
+        assert_eq!(folder["error"], "");
+        assert_eq!(folder["retry_at"], 0);
+        assert_eq!(f.core.m.saved["folders"]["f1"]["initialized"], false);
+    }
+
     #[tokio::test]
     async fn transient_errors_back_off_without_entering_attention() {
         for (message, kind) in [

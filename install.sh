@@ -2,6 +2,7 @@
 # Install omarchy-cloudkit into the running Omarchy shell.
 #
 #   ./install.sh             copy this checkout into ~/.config/omarchy/plugins
+#   ./install.sh --in-place   build inside an Omarchy marketplace checkout
 #   ./install.sh --link      symlink it instead (for development)
 #   ./install.sh --uninstall stop the service, disable the widget, remove what this script installed
 #   --no-restart             on an update, don't restart the shell and guacd to load the new code
@@ -14,7 +15,7 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ID="local.cloudkit"
+PLUGIN_ID="sabb4th.cloudkit"
 PLUGIN_DIR="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 CLI_LINK="$HOME/.local/bin/omarchy-cloudkit"
 MARKER=".cloudkit-install"
@@ -30,6 +31,7 @@ for arg in "$@"; do
   case "$arg" in
     --copy) MODE="copy" ;;
     --link) MODE="link" ;;
+    --in-place) MODE="in-place" ;;
     --no-enable) ENABLE=false ;;
     --no-restart) RESTART=false ;;
     --no-install-deps) INSTALL_DEPS=false ;;
@@ -173,7 +175,13 @@ elif [[ ! -x $SRC/bin/cloudkit-native ]]; then
 fi
 
 mkdir -p "$(dirname "$PLUGIN_DIR")"
-if [[ -e $PLUGIN_DIR || -L $PLUGIN_DIR ]]; then
+if [[ $MODE == "in-place" ]]; then
+  if [[ $(readlink -f -- "$PLUGIN_DIR") != "$SRC" ]]; then
+    warn "--in-place must run from $PLUGIN_DIR; nothing replaced."
+    exit 1
+  fi
+  UPDATE=true
+elif [[ -e $PLUGIN_DIR || -L $PLUGIN_DIR ]]; then
   UPDATE=true
   if ! is_ours; then
     warn "$PLUGIN_DIR exists and was not installed by this script."
@@ -182,7 +190,9 @@ if [[ -e $PLUGIN_DIR || -L $PLUGIN_DIR ]]; then
   fi
 fi
 
-if [[ $MODE == "link" && -L $PLUGIN_DIR && "$(readlink -f "$PLUGIN_DIR")" == "$SRC" ]]; then
+if [[ $MODE == "in-place" ]]; then
+  say "Built in place; checkout and Git history preserved"
+elif [[ $MODE == "link" && -L $PLUGIN_DIR && "$(readlink -f "$PLUGIN_DIR")" == "$SRC" ]]; then
   say "Already linked to this checkout"
 else
   # Stage everything before moving the previous installation. A failed copy or

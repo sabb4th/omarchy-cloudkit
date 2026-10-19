@@ -6,7 +6,7 @@ Não precisa de Python para executar, instalar ou usar o widget.
 
 Na barra, todos os indicadores são brancos: nuvem simples quando ocioso,
 check quando saudável, rotação durante sincronização, seta de envio para uploads
-do streaming, pausa (Ⅱ), alterações pendentes (…), offline (×) e erro (!).
+do streaming, pausa (Ⅱ), alterações pendentes (…), offline (×), erro (!) e desligado (⏻).
 A sincronização bidirecional usa um indicador comum de atividade; o serviço
 não informa a direção de cada transferência. Detalhes ficam no tooltip e painel.
 
@@ -40,6 +40,29 @@ Filtros próprios **substituem** os globais. Pausar permite que uma sincronizaç
 já iniciada termine. Os backups protegem arquivos locais substituídos ou
 apagados; não são um histórico completo da nuvem.
 
+## Chave geral e economia de recursos
+
+A chave ao lado de **Cloud Drives** liga ou desliga o funcionamento completo.
+Ao desligar, o daemon encerra sincronizações com um prazo de conclusão de 35 s;
+se necessário, cancela o restante preservando o estado para recuperação.
+Depois desmonta os drives, encerra os processos rclone e remove os observadores.
+Uploads pendentes no cache do streaming impedem o desligamento até terminarem.
+Contas, preferências de montagem, pastas e pausas individuais são preservadas.
+
+O estado desligado persiste após reiniciar a sessão. O widget permanece na barra
+para religar; o processo compartilhado do Omarchy continua atendendo o desktop.
+Enquanto desligado, CloudKit não mantém daemon, bridge, rclone ou timer de reconexão.
+A chave de cada conta continua controlando somente o streaming daquela conta.
+
+```bash
+omarchy-cloudkit power off
+omarchy-cloudkit power status  # consulta sem iniciar o daemon
+omarchy-cloudkit power on
+```
+
+O comando `stop` continua sendo uma parada temporária para manutenção;
+use `power off` para impedir a reinicialização automática pelo widget.
+
 ## Instalação no Omarchy
 
 Clone o projeto e execute o instalador:
@@ -65,7 +88,7 @@ plugin usam o usuário normal. Não execute o script inteiro como root.
 ./install.sh --uninstall         # preserva contas, configurações e arquivos
 ```
 
-O plugin usa o identificador `local.cloudkit`; seu nome público e comando são
+O plugin usa o identificador `sabb4th.cloudkit`; seu nome público e comando são
 `omarchy-cloudkit`. O atalho fica em `~/.local/bin/omarchy-cloudkit`. O comando
 `bin/guac` permanece como alias de compatibilidade e também executa Rust.
 
@@ -73,9 +96,34 @@ Atualizações preparam uma cópia temporária antes de substituir a instalaçã
 Falhas ao verificar atividade não são interpretadas como serviço ocioso.
 A desinstalação recusa agir enquanto há transferências ou atividade desconhecida.
 
-A instalação via gerenciador de plugins, sozinha, não compila Rust. Use este
-instalador no checkout antes de habilitar o widget. Não há download automático de
-binários de terceiros nem fallback para o daemon Python.
+### Instalação pelo gerenciador / marketplace (configuração manual)
+
+O gerenciador só clona o código: não executa o instalador nem compila Rust.
+Antes de habilitar o widget, faça a configuração no próprio checkout:
+
+```bash
+omarchy plugin add https://github.com/sabb4th/omarchy-cloudkit.git
+cd "$HOME/.config/omarchy/plugins/sabb4th.cloudkit"
+./install.sh --in-place
+```
+
+`--in-place` mantém o checkout Git e prepara o executável e o atalho da CLI.
+Após atualizar pelo gerenciador, execute o mesmo instalador para recompilar.
+Não há download automático de binários nem fallback para o daemon Python.
+
+Para remover uma instalação feita pelo gerenciador:
+
+```bash
+cd "$HOME/.config/omarchy/plugins/sabb4th.cloudkit"
+./install.sh --uninstall
+omarchy plugin remove sabb4th.cloudkit
+```
+
+Para migrar a primeira versão com ID `local.cloudkit`, desligue o widget antigo
+e pare o daemon antes de instalar/habilitar `sabb4th.cloudkit`. Os dados ficam nos
+mesmos diretórios XDG; não habilite os dois widgets simultaneamente.
+
+A preparação da listagem está em [docs/MARKETPLACE.md](docs/MARKETPLACE.md).
 
 ## Dados de instalações anteriores
 
@@ -98,6 +146,7 @@ administrar as mesmas pastas simultaneamente.
 ## CLI
 
 ```bash
+omarchy-cloudkit power status
 omarchy-cloudkit status --json
 omarchy-cloudkit stream Drive on
 omarchy-cloudkit stream Drive off --force
@@ -118,6 +167,9 @@ omarchy-cloudkit --help
 `FOLDER` pode ser ID, apelido, `REMOTE:PATH` ou caminho local. Remover uma pasta
 ou uma conta preserva os arquivos locais; `unkeep --delete-local` solicita o uso
 da lixeira pelo `gio`.
+
+`keep` é sincronização bidirecional, incluindo exclusões. O modo de backup
+somente de envio (`rclone copy`) ainda não é oferecido pelo plugin.
 
 ## Desenvolvimento e validação
 

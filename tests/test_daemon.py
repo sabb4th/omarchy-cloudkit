@@ -981,7 +981,31 @@ def test_renamed_directory_stays_watched(sb: Sandbox) -> None:
     sb.ok("remove_folder", id=fid)
 
 
-SCENARIOS.extend([test_renamed_directory_stays_watched, test_account_removal_preserves_local_files])
+def test_global_power_stops_mounts_and_preserves_preferences(sb: Sandbox) -> None:
+    sb.ok("stream", remote="CloudA", on=True)
+    mount = sb.drive("CloudA")["mountPath"]
+    config = sb.tmp / "cfg/guacamole/config.json"
+    preferences = config.read_bytes()
+    sb.ok("power_off")
+    sb.proc.wait(timeout=75)
+    assert not os.path.ismount(mount), "global off must unmount drives"
+    assert subprocess.run(
+        ["pgrep", "-f", f"rclone rcd --rc-addr=unix://{sb.run}"],
+        capture_output=True, check=False,
+    ).returncode != 0, "global off must stop all owned rclone processes"
+    status = guac_cli(sb, "power", "status")
+    assert status.returncode == 0 and not json.loads(status.stdout)["enabled"]
+    disabled = guac_cli(sb, "status", "--json")
+    assert disabled.returncode != 0 and "switched off" in disabled.stderr
+    assert config.read_bytes() == preferences, "power must preserve configuration"
+    # Restart directly to keep the real user's systemd manager outside this test.
+    (sb.tmp / "cfg/guacamole/disabled").unlink()
+    sb.start()
+    wait(lambda: sb.drive("CloudA")["mounted"], 20, "mount preference restored")
+
+
+SCENARIOS.extend([test_renamed_directory_stays_watched, test_account_removal_preserves_local_files,
+                  test_global_power_stops_mounts_and_preserves_preferences])
 
 
 def main() -> int:

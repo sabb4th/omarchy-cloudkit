@@ -12,6 +12,14 @@ validação. Não significa paridade comprovada em todos os provedores, nem uma
 versão estável auditada. OAuth, particularidades de servidores e contas reais
 precisam de validação adicional.
 
+## Controle global (0.2.0)
+
+O estado de energia usa um marcador privado `disabled` no diretório de
+configuração, sem reescrever as preferências de contas ou pastas. CLI, daemon e
+widget respeitam esse estado, inclusive após novo login. O widget não mantém
+ponte IPC nem reconexão enquanto desligado. Cancelamento no desligamento não é
+tratado como falha de resync; a primeira sincronização pode continuar ao religar.
+
 ## Arquitetura
 
 | Módulo | Responsabilidade |
@@ -97,10 +105,11 @@ rclone sob a mesma carga, versão de rclone, cache e perfil.
 
 ## Validação desta implementação
 
-- `cargo test --locked`: 13 testes unitários Rust e 3 testes IPC de integração.
-- `tests/test_daemon.py` com o release Rust: 21 cenários E2E aprovados.
+- `cargo test --locked`: 15 testes unitários Rust, 3 testes IPC e 1 teste de ciclo de energia.
+- `tests/test_daemon.py` com o release Rust: 21 cenários anteriores aprovados; teste adicional de desligamento global com FUSE.
 - `tests/test_ipc.py`: 15 testes aprovados, incluindo ponte nativa e widget offscreen.
-- `tests/test_install.py`: 7 testes aprovados, incluindo falha de cópia e execução sem Python.
+- `tests/test_install.py`: 9 testes aprovados, incluindo falha de cópia e execução sem Python.
+- `tests/test_power_widget.py`: botão QML liga/desliga, respeita CLI e não reconecta desligado.
 - Build release, Clippy com warnings como erros, rustfmt e sintaxe Bash aprovados.
 
 Após colocar o catálogo fixo de provedores em cache, os testes Rust e os cenários

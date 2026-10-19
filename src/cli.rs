@@ -40,7 +40,7 @@ fn state(reader: &mut BufReader<UnixStream>) -> Result<Value> {
     Err("Daemon disconnected".into())
 }
 fn request(cmd: &str, args: Value) -> Result<Value> {
-    let mut socket = connect(cmd != "shutdown")?;
+    let mut socket = connect(!["shutdown", "power_off"].contains(&cmd))?;
     socket
         .set_read_timeout(Some(Duration::from_secs(330)))
         .map_err(|e| e.to_string())?;
@@ -65,6 +65,9 @@ fn snapshot() -> Result<Value> {
 }
 fn ensure() -> Result<()> {
     let paths = Paths::new();
+    if !paths.enabled()? {
+        return Err("CloudKit is switched off; use omarchy-cloudkit power on".into());
+    }
     ipc::private_runtime(&paths.runtime).map_err(|e| e.to_string())?;
     if ipc::connect().is_ok() {
         return Ok(());
@@ -270,12 +273,50 @@ pub fn main() -> Result<()> {
     };
     if ["--help", "-h", "help"].contains(&cmd) || flag("--help") {
         println!(
-            "omarchy-cloudkit — cloud drives and safe two-way sync\nCommands: status [--json], daemon [--ensure], stop, watch, bridge, busy,\nstream DRIVE on|off [--force], mount DRIVE, unmount DRIVE [--force],\nstream-all on|off, keep REMOTE:PATH [LOCAL], unkeep FOLDER [--delete-local],\nsync [FOLDER], pause|resume FOLDER..., alias FOLDER LABEL,\nexclude [FOLDER] [--add PATTERN] [--remove PATTERN] [--global],\nresolve FOLDER resync|force|dismiss, browse REMOTE:PATH, size REMOTE:PATH,\nadd-oauth NAME PROVIDER [--own-client] [--client-id ID --client-secret-stdin],\nadd-credentials NAME PROVIDER < credentials.json, set-client-id DRIVE,\nclient-guide PROVIDER, reconnect DRIVE, retry DRIVE, takeover DRIVE,\nremove DRIVE [-y], label DRIVE LABEL, set-path DRIVE PATH,\nconfig [KEY [VALUE]], log [-n N] [--daemon], open [DRIVE], service install|uninstall"
+            "omarchy-cloudkit — cloud drives and safe two-way sync\nCommands: power on|off|status, status [--json], daemon [--ensure], stop, watch, bridge, busy,\nstream DRIVE on|off [--force], mount DRIVE, unmount DRIVE [--force],\nstream-all on|off, keep REMOTE:PATH [LOCAL], unkeep FOLDER [--delete-local],\nsync [FOLDER], pause|resume FOLDER..., alias FOLDER LABEL,\nexclude [FOLDER] [--add PATTERN] [--remove PATTERN] [--global],\nresolve FOLDER resync|force|dismiss, browse REMOTE:PATH, size REMOTE:PATH,\nadd-oauth NAME PROVIDER [--own-client] [--client-id ID --client-secret-stdin],\nadd-credentials NAME PROVIDER < credentials.json, set-client-id DRIVE,\nclient-guide PROVIDER, reconnect DRIVE, retry DRIVE, takeover DRIVE,\nremove DRIVE [-y], label DRIVE LABEL, set-path DRIVE PATH,\nconfig [KEY [VALUE]], log [-n N] [--daemon], open [DRIVE], service install|uninstall"
         );
         return Ok(());
     }
     if cmd == "--version" {
         println!("omarchy-cloudkit {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if cmd == "power" {
+        let paths = Paths::new();
+        match arg(0) {
+            "status" => (),
+            "on" => {
+                paths.set_enabled(true)?;
+                ensure()?;
+            }
+            "off" => {
+                match ipc::connect() {
+                    Ok(_) => {
+                        request("power_off", json!({}))?;
+                    }
+                    Err(e)
+                        if matches!(
+                            e.kind(),
+                            io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+                        ) =>
+                    {
+                        paths.set_enabled(false)?;
+                    }
+                    Err(e) => return Err(e.to_string()),
+                }
+                let deadline = Instant::now() + Duration::from_secs(75);
+                while ipc::connect().is_ok() {
+                    if Instant::now() >= deadline {
+                        return Err(
+                            "CloudKit is still stopping; pending work is being preserved".into(),
+                        );
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+            _ => return Err("Expected power on|off|status".into()),
+        }
+        println!("{}", json!({"enabled":paths.enabled()?}));
         return Ok(());
     }
     if cmd == "daemon" {

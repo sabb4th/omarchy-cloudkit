@@ -1,0 +1,21 @@
+name: Validate
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y rclone
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Test native runtime and power lifecycle
+        run: cargo test --locked
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Check shell scripts
+        run: bash -n install.sh bin/omarchy-cloudkit bin/guac bin/guac-bridge

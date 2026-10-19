@@ -210,14 +210,15 @@ Item {
           trailingControl: Component {
             ToggleSwitch {
               id: allSwitch
-              visible: root.service.hasDrives && root.service.ready
-              checked: root.service.allStreaming
+              visible: true
+              enabled: root.service.powerReady && !root.service.powerChanging
+              checked: root.service.powered
               foreground: hero.foreground
-              onToggled: root.service.streamAll(!root.service.allStreaming)
+              onToggled: root.service.setPower(!root.service.powered)
 
               PanelToolTip {
                 visible: allSwitch.containsMouse
-                text: root.service.allStreaming ? "Stop streaming every drive (M)" : "Stream every drive (M)"
+                text: root.service.powered ? "Switch off CloudKit: stop sync, streaming and background processes" : "Switch on CloudKit"
                 fontFamily: hero.fontFamily
               }
             }

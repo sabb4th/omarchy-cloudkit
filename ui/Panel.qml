@@ -7,8 +7,8 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "local.cloudkit"
-  ipcTarget: "local.cloudkit"
+  moduleName: "sabb4th.cloudkit"
+  ipcTarget: "sabb4th.cloudkit"
   manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -22,6 +22,7 @@ Panel {
                                        : (service.statusState === "online" ? "#6fa96f" : "#c9a24a")
 
   readonly property string cloudState: {
+    if (!service.powered) return "off"
     if (service.attention || service.actionFailed || service.startError !== "") return "error"
     if (!service.connected || !service.online) return "offline"
     if (!service.ready) return "pending"
@@ -43,6 +44,7 @@ Panel {
   }
 
   readonly property string barTooltipText: {
+    if (!service.powered || service.powerChanging) return service.statusText
     if (!service.connected) return "Clouds: " + (service.startError || "starting…")
     if (service.actionFailed && service.lastError !== "") return "Clouds: " + service.lastError
     if (!service.hasDrives) return "Clouds: click to connect a drive"
@@ -107,7 +109,7 @@ Panel {
           monochrome: true
           active: root.cloudState === "synced"
           busy: root.cloudState === "syncing"
-          badge: ({ error: "!", offline: "×", paused: "Ⅱ", pending: "…", uploading: "↑" })[root.cloudState] || ""
+          badge: ({ off: "⏻", error: "!", offline: "×", paused: "Ⅱ", pending: "…", uploading: "↑" })[root.cloudState] || ""
           attention: false
         }
       }
@@ -159,7 +161,7 @@ Panel {
         fontFamily: root.fontFamily
         statusColor: root.statusColor
         // Through the fade-out too, while the window is still mapped
-        animate: panel.visible
+        animate: panel.visible && service.powered
       }
     }
   }

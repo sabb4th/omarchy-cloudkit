@@ -14,6 +14,11 @@ Item {
   readonly property string home: String(Quickshell.env("HOME") || "")
 
   // ---- daemon state (replaced wholesale on every push)
+  // Persisted by the native CLI. No daemon, bridge or retry timer runs while off.
+  property bool powered: true
+  property bool powerReady: false
+  property bool powerChanging: powerProc.running
+  property string _powerOperation: "status"
   property bool connected: false
   property bool everConnected: false
   property bool starting: false
@@ -36,19 +41,22 @@ Item {
   property var filters: ({ excludes: [], otherRules: 0 })
   property string daemonVersion: ""
 
-  readonly property bool ready: connected && engine.state === "running"
-  readonly property bool attention: summary.attention > 0 || (everConnected && !connected)
+  readonly property bool ready: powered && !powerChanging && connected && engine.state === "running"
+  readonly property bool attention: powered && (summary.attention > 0 || (everConnected && !connected)
                                     || (connected && engine.state !== "running" && engine.state !== "starting"
-                                        && engine.state !== "restarting")
+                                        && engine.state !== "restarting"))
   // "online": everything requested is healthy; "offline": nothing or part streaming, or no network;
   // "error": something needs attention
   readonly property string statusState: {
+    if (!powered) return "off"
     if (attention || actionFailed) return "error"
     if (!connected || !online) return "offline"
     if (hasDrives && (summary.streaming > 0 || summary.folders > 0) && summary.mounted === summary.streaming) return "online"
     return "offline"
   }
   readonly property string statusText: {
+    if (powerChanging) return _powerOperation === "off" ? "Stopping CloudKit safely…" : "Starting CloudKit…"
+    if (!powered) return "CloudKit is off"
     if (!connected) return starting ? "Starting the background service…" : (startError || "Connecting…")
     if (engine.state === "missing") return "rclone is not installed"
     if (engine.state !== "running") return "Starting rclone…"
@@ -63,7 +71,7 @@ Item {
     return parts.join(" · ")
   }
   readonly property bool hasDrives: drives.length > 0
-  readonly property bool busy: summary.syncing > 0 || transfers.count > 0 || summary.uploads > 0
+  readonly property bool busy: powered && (summary.syncing > 0 || transfers.count > 0 || summary.uploads > 0)
   readonly property bool allStreaming: hasDrives && summary.streaming === drives.length
 
   // ---- transient feedback for the panel's status line
@@ -83,6 +91,10 @@ Item {
   property var _callbacks: ({})
 
   function request(cmd, args, callback) {
+    if (!powered || powerChanging) {
+      if (callback) callback(false, null, "CloudKit is off; turn on the main switch first", "")
+      return -1
+    }
     if (!connected || !bridgeProc.running) {
       if (callback) callback(false, null, "The background service isn't running yet", "")
       ensureDaemon()
@@ -277,11 +289,13 @@ Item {
   // uses private pipes, never an unchecked socket path or a UID from the environment.
 
   function connectNow() {
+    if (!powerReady || !powered || powerChanging) return
     if (connected || bridgeProc.running || pluginDir === "") return
     bridgeProc.running = true
   }
 
   function ensureDaemon() {
+    if (!powerReady || !powered || powerChanging) return
     if (ensureProc.running || pluginDir === "") return
     starting = true
     startError = ""
@@ -305,7 +319,11 @@ Item {
     _callbacks = ({})
     pendingRequests = 0
     for (var id in cbs) cbs[id](false, null, "Lost connection to the background service", "")
-    reconnectTimer.restart()
+    if (powered && !powerChanging) {
+      // An external `power off` must also stop widget reconnection.
+      powerReady = false
+      checkPower()
+    }
   }
 
   Process {
@@ -318,6 +336,7 @@ Item {
     stderr: StdioCollector { id: bridgeErr }
     onExited: function(exitCode) {
       root._onSocketState(false)
+      if (!root.powered || root.powerChanging) return
       if (exitCode !== 0 && bridgeErr.text) root.startError = String(bridgeErr.text).trim()
       if (!reconnectTimer.running) reconnectTimer.restart()
     }
@@ -329,6 +348,7 @@ Item {
     // Quick retries right after startup, then back off
     interval: attempts < 10 ? 500 : 5000
     onTriggered: {
+      if (!root.powered || root.powerChanging) return
       attempts++
       if (attempts === 2) root.ensureDaemon()
       root.connectNow()
@@ -361,6 +381,59 @@ Item {
     onTriggered: root.actionFailed = false
   }
 
-  Component.onCompleted: connectNow()
-  onPluginDirChanged: connectNow()
+  function checkPower() {
+    if (pluginDir === "" || powerReady || powerProc.running) return
+    _powerOperation = "status"
+    powerProc.command = [cli, "power", "status"]
+    powerProc.running = true
+  }
+
+  function setPower(on) {
+    if (!powerReady || powerProc.running || powered === on) return
+    clearError()
+    _powerOperation = on ? "on" : "off"
+    // Stop reconnecting before shutdown, including connections in flight.
+    reconnectTimer.stop()
+    if (!on) {
+      powered = false
+      starting = false
+      bridgeProc.running = false
+      ensureProc.running = false
+      _onSocketState(false)
+    }
+    powerProc.command = [cli, "power", on ? "on" : "off"]
+    powerProc.running = true
+  }
+
+  Process {
+    id: powerProc
+    stdout: StdioCollector { id: powerOut }
+    stderr: StdioCollector { id: powerErr }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        try {
+          root.powered = JSON.parse(powerOut.text).enabled === true
+          root.powerReady = true
+          root.startError = ""
+          if (root.powered) Qt.callLater(root.connectNow)
+          return
+        } catch (e) {}
+      }
+      root.powerReady = true
+      root.starting = false
+      root.startError = String(powerErr.text || "Could not change CloudKit power state").trim()
+      root.lastError = root.startError
+      root.actionFailed = true
+      // A rejected shutdown (for example pending VFS uploads) leaves the daemon on.
+      if (root._powerOperation === "off") {
+        root.powered = true
+        Qt.callLater(root.connectNow)
+      } else {
+        root.powered = false
+      }
+    }
+  }
+
+  Component.onCompleted: checkPower()
+  onPluginDirChanged: checkPower()
 }

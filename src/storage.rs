@@ -61,6 +61,27 @@ impl Paths {
             legacy,
         }
     }
+    pub fn disabled(&self) -> PathBuf {
+        self.config.join("disabled")
+    }
+    pub fn enabled(&self) -> Result<bool> {
+        match fs::symlink_metadata(self.disabled()) {
+            Ok(_) => Ok(false),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(true),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    pub fn set_enabled(&self, enabled: bool) -> Result<()> {
+        if enabled {
+            match fs::remove_file(self.disabled()) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }
+        } else {
+            atomic(&self.disabled(), b"Disabled by the global power switch\n")
+        }
+    }
     pub fn socket(&self) -> PathBuf {
         self.runtime.join("daemon.sock")
     }
