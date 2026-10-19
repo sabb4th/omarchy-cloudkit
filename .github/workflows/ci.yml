@@ -9,8 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install test dependencies
-        run: sudo apt-get update && sudo apt-get install -y rclone
+      - name: Install pinned rclone for runtime tests
+        run: |
+          curl --fail --location --output "$RUNNER_TEMP/rclone.zip" https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-amd64.zip
+          echo "349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702  $RUNNER_TEMP/rclone.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/rclone.zip" -d "$RUNNER_TEMP/rclone"
+          mkdir -p "$HOME/.local/bin"
+          install -m 755 "$RUNNER_TEMP/rclone/rclone-v1.75.2-linux-amd64/rclone" "$HOME/.local/bin/rclone"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Show rclone version
+        run: rclone version
       - name: Check formatting
         run: cargo fmt --check
       - name: Test native runtime and power lifecycle

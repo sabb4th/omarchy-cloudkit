@@ -108,7 +108,7 @@ rclone sob a mesma carga, versão de rclone, cache e perfil.
 - `cargo test --locked`: 15 testes unitários Rust, 3 testes IPC e 1 teste de ciclo de energia.
 - `tests/test_daemon.py` com o release Rust: 21 cenários anteriores aprovados; teste adicional de desligamento global com FUSE.
 - `tests/test_ipc.py`: 15 testes aprovados, incluindo ponte nativa e widget offscreen.
-- `tests/test_install.py`: 9 testes aprovados, incluindo falha de cópia e execução sem Python.
+- `tests/test_install.py`: 10 testes aprovados, incluindo falha de cópia e execução sem Python.
 - `tests/test_power_widget.py`: botão QML liga/desliga, respeita CLI e não reconecta desligado.
 - Build release, Clippy com warnings como erros, rustfmt e sintaxe Bash aprovados.
 

@@ -76,6 +76,8 @@ cd omarchy-cloudkit
 O instalador verifica e instala os pacotes ausentes: `rclone`, `fuse3`,
 `quickshell`, `wl-clipboard`, `libnotify`, `glib2` e `xdg-utils`; para compilar,
 também `rust` e `gcc`.
+Requer **rclone 1.75.2 ou superior**, incluindo as APIs RC/bisync usadas pelo plugin.
+O instalador recusa versões antigas antes de substituir uma instalação.
 A instalação de pacotes usa pacman com elevação; a compilação e a instalação do
 plugin usam o usuário normal. Não execute o script inteiro como root.
 

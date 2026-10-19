@@ -26,7 +26,7 @@ class InstallerTests(unittest.TestCase):
             "fusermount3", "qs", "wl-copy", "notify-send", "gio", "xdg-open",
         ):
             stub = stubs / name
-            stub.write_text("#!/bin/sh\nexit 0\n")
+            stub.write_text("#!/bin/sh\nprintf 'rclone v1.75.2\\n'\n" if name == "rclone" else "#!/bin/sh\nexit 0\n")
             stub.chmod(0o755)
         runtime = self.root / "run"
         runtime.mkdir(mode=0o700)
@@ -86,6 +86,15 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.shortcut.resolve(), self.plugin / "bin/omarchy-cloudkit")
         self.assertFalse((self.plugin / ".cloudkit-install").exists())
         self.assert_data_preserved()
+
+    def test_old_rclone_is_rejected_before_replacing_installation(self) -> None:
+        self.install("--no-enable")
+        sentinel = self.plugin / "working-install"
+        sentinel.write_text("preserved\n")
+        (self.stubs / "rclone").write_text("#!/bin/sh\nprintf 'rclone v1.60.1\\n'\n")
+        result = self.install("--no-enable", success=False)
+        self.assertIn("rclone >= 1.75.2", result.stderr)
+        self.assertEqual(sentinel.read_text(), "preserved\n")
 
     def test_in_place_refuses_a_different_checkout(self) -> None:
         self.install("--in-place", success=False)

@@ -26,6 +26,7 @@ RESTART=true
 UPDATE=false
 INSTALL_DEPS=true
 BUILD=true
+MIN_RCLONE="1.75.2"
 
 for arg in "$@"; do
   case "$arg" in
@@ -160,6 +161,20 @@ if (( ${#missing[@]} )); then
     pkexec pacman -S --needed --noconfirm -- "${missing[@]}"
   fi
 fi
+# Older distributions may ship rclone without the RC/bisync APIs we use.
+# Refuse before replacing an installation instead of entering a restart loop.
+rclone_version=$(rclone version)
+if [[ $rclone_version =~ ^rclone[[:space:]]v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+  detected_rclone="${BASH_REMATCH[1]}"
+else
+  warn "Cannot determine rclone version; installation preserved."
+  exit 1
+fi
+if ! printf '%s\n' "$MIN_RCLONE" "$detected_rclone" | sort -V -C; then
+  warn "rclone >= $MIN_RCLONE is required (found $detected_rclone). Update rclone before installing."
+  exit 1
+fi
+
 if $BUILD; then
   say "Building omarchy-cloudkit"
   cargo build --manifest-path "$SRC/Cargo.toml" --release --locked

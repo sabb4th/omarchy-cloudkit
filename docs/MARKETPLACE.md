@@ -17,7 +17,7 @@ cd "$HOME/.config/omarchy/plugins/sabb4th.cloudkit"
 ```
 
 The installer documents and requests elevation only for missing Arch packages.
-Rust builds locally with Cargo.lock. It does not download or execute a release
+Rust builds locally with Cargo.lock; rclone 1.75.2 or newer is required. It does not download or execute a release
 binary. After updating the checkout through the manager, repeat the installer.
 The installer preserves the manager's .git directory. See README for removal.
 
