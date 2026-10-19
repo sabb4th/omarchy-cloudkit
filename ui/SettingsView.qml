@@ -106,6 +106,7 @@ Item {
   }
 
   component Label: Text {
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     font.bold: true
@@ -113,6 +114,7 @@ Item {
   }
 
   component Hint: Text {
+    textFormat: Text.PlainText
     Layout.fillWidth: true
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption - Style.space(2)
