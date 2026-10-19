@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+launcher=$(readlink -f -- "${BASH_SOURCE[0]}")
+plugin_bin=$(cd -- "$(dirname -- "$launcher")" && pwd)
+exec "$plugin_bin/omarchy-cloudkit" bridge

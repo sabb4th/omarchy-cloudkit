@@ -1,0 +1,266 @@
+.pragma library
+
+// Formatters and static data for the omarchy-cloudkit widget
+
+function formatBytes(bytes) {
+  var b = Number(bytes || 0)
+  if (b <= 0 || !isFinite(b)) return "0 B"
+  var units = ["B", "KB", "MB", "GB", "TB", "PB"]
+  var i = 0
+  while (b >= 1024 && i < units.length - 1) {
+    b /= 1024
+    i++
+  }
+  // 100 GB, not 100.0 GB
+  return (i === 0 ? b.toFixed(0) : b.toFixed(1).replace(/\.0$/, "")) + " " + units[i]
+}
+
+function formatSpeed(bps) {
+  var n = Number(bps || 0)
+  return n > 0 ? formatBytes(n) + "/s" : ""
+}
+
+function ago(ts) {
+  var t = Number(ts || 0)
+  if (t <= 0) return "never"
+  var diff = Math.max(0, Math.floor(Date.now() / 1000) - t)
+  if (diff < 45) return "just now"
+  var mins = Math.floor(diff / 60)
+  if (mins < 60) return Math.max(1, mins) + "m ago"
+  var hours = Math.floor(mins / 60)
+  if (hours < 24) return hours + "h ago"
+  var days = Math.floor(hours / 24)
+  if (days < 30) return days + "d ago"
+  return Math.floor(days / 30) + "mo ago"
+}
+
+function inFuture(ts) {
+  var diff = Number(ts || 0) - Math.floor(Date.now() / 1000)
+  if (diff <= 5) return "soon"
+  if (diff < 60) return "in " + diff + "s"
+  var mins = Math.round(diff / 60)
+  if (mins < 60) return "in " + mins + "m"
+  return "in " + Math.round(mins / 60) + "h"
+}
+
+// Collapse $HOME to ~ for display
+function tildify(path, home) {
+  var p = String(path || "")
+  if (home && (p === home || p.indexOf(home + "/") === 0)) return "~" + p.substring(home.length)
+  return p
+}
+
+function mountStateText(d) {
+  if (!d) return ""
+  switch (d.mountState) {
+    case "mounted": return "streaming"
+    case "mounting": return "connecting…"
+    case "unmounting": return "disconnecting…"
+    case "waiting": return d.errorKind === "rate" ? "rate-limited" : "waiting for network"
+    case "error": return "error"
+    case "foreign": return "in use elsewhere"
+    default: return d.stream ? "starting…" : "not streaming"
+  }
+}
+
+function folderStateText(f) {
+  if (!f) return ""
+  switch (f.state) {
+    case "syncing": {
+      var p = f.progress || {}
+      var verb = f.resync ? (f.initialized ? "resyncing" : "first sync") : "syncing"
+      if (p.totalTransfers > 0) return verb + " " + p.transfers + "/" + p.totalTransfers
+      return verb + "…"
+    }
+    case "synced": return "synced " + ago(f.lastSync)
+    case "changes": return "changes pending"
+    case "pending": return f.resync && f.initialized ? "waiting to resync" : "waiting to sync"
+    case "waiting": return "offline, will sync"
+    case "paused": return f.localChanges ? "paused, changes waiting" : "paused"
+    case "attention": return "needs attention"
+    case "error": return "retrying " + inFuture(f.nextSync)
+    default: return f.state || ""
+  }
+}
+
+// Folders that stay listed while their drive's list is closed: the ones that need a look or a
+// decision. Syncing doesn't count, or rows would come and go every few minutes; a folder you
+// just added shows because adding one opens the list.
+function folderStaysListed(f) {
+  if (!f) return false
+  if (f.attention || f.state === "attention" || f.state === "error") return true
+  return (f.conflictCount || 0) > 0 || (f.watchError || "") !== ""
+}
+
+// One phrase for a drive's folders, what the busiest of them is doing, and its tone
+function folderGroup(list) {
+  var attention = 0, retrying = 0, syncing = 0, pending = 0, offline = 0, paused = 0
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i] || {}
+    if (f.attention || f.state === "attention" || (f.conflictCount || 0) > 0) {
+      attention++
+      if (f.state === "syncing") syncing++
+    }
+    else if (f.state === "error") retrying++
+    else if (f.state === "paused") paused++
+    else if (f.state === "syncing") syncing++
+    else if (f.state === "changes" || f.state === "pending") pending++
+    else if (f.state === "waiting") offline++
+  }
+  var busy = syncing > 0
+  if (attention > 0) return { text: attention + (attention === 1 ? " needs you" : " need you"), tone: "urgent", busy: busy }
+  if (retrying > 0) return { text: retrying + " retrying", tone: "urgent", busy: busy }
+  if (syncing > 0) return { text: syncing + " syncing", tone: "accent", busy: busy }
+  if (pending > 0) return { text: pending + " waiting to sync", tone: "accent", busy: false }
+  if (offline > 0) return { text: "offline, will sync", tone: "dim", busy: false }
+  if (paused > 0 && paused === list.length) return { text: "paused", tone: "dim", busy: false }
+  if (paused > 0) return { text: "synced, " + paused + " paused", tone: "dim", busy: false }
+  return { text: list.length === 1 ? "synced" : "all synced", tone: "dim", busy: false }
+}
+
+function fileGlyph(name) {
+  var n = String(name || "").toLowerCase()
+  var ext = n.lastIndexOf(".") > 0 ? n.substring(n.lastIndexOf(".") + 1) : ""
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "bmp", "tiff"].indexOf(ext) !== -1) return "󰈟"
+  if (["mp4", "mkv", "mov", "webm", "avi"].indexOf(ext) !== -1) return "󰈫"
+  if (["mp3", "flac", "ogg", "wav", "m4a", "opus"].indexOf(ext) !== -1) return "󰈣"
+  if (["pdf"].indexOf(ext) !== -1) return "󰈦"
+  if (["zip", "tar", "gz", "xz", "7z", "rar", "zst"].indexOf(ext) !== -1) return "󰗄"
+  if (["md", "txt", "org", "tex", "rst"].indexOf(ext) !== -1) return "󰈙"
+  if (["doc", "docx", "odt", "rtf"].indexOf(ext) !== -1) return "󰈬"
+  if (["xls", "xlsx", "ods", "csv"].indexOf(ext) !== -1) return "󰈛"
+  if (["ppt", "pptx", "odp", "key"].indexOf(ext) !== -1) return "󰈧"
+  return "󰈔"
+}
+
+var ALL_PROVIDERS = [
+  { id: "drive", name: "Google Drive", category: "Cloud storage", glyph: "󰊭", color: "#4285F4",
+    authType: "oauth", defaultName: "GoogleDrive", authTag: "Own client · browser sign-in", customClient: true },
+  { id: "onedrive", name: "Microsoft OneDrive", category: "Cloud storage", glyph: "󰏊", color: "#0078D4",
+    authType: "oauth", defaultName: "OneDrive", authTag: "Own client · browser sign-in", customClient: true },
+  { id: "dropbox", name: "Dropbox", category: "Cloud storage", glyph: "\uf16b", color: "#0061FF",
+    authType: "oauth", defaultName: "Dropbox", authTag: "Own client · browser sign-in", customClient: true },
+  { id: "nextcloud", name: "Nextcloud / ownCloud", category: "Self-hosted", glyph: "󰒋", color: "#0082C9",
+    authType: "credentials", defaultName: "Nextcloud", authTag: "Server & app password" },
+  { id: "s3", name: "S3 / MinIO / R2", category: "Object storage", glyph: "󰋊", color: "#FF9900",
+    authType: "credentials", defaultName: "S3", authTag: "Access key & secret" },
+  { id: "box", name: "Box", category: "Cloud storage", glyph: "󰉉", color: "#0061D5",
+    authType: "oauth", defaultName: "Box", authTag: "Own client · browser sign-in", customClient: true },
+  { id: "pcloud", name: "pCloud", category: "Cloud storage", glyph: "󰅟", color: "#14BF96",
+    authType: "oauth", defaultName: "pCloud", authTag: "Own client · browser sign-in", customClient: true },
+  { id: "protondrive", name: "Proton Drive", category: "Encrypted", glyph: "󰅟", color: "#6D4AFF",
+    authType: "credentials", defaultName: "ProtonDrive", authTag: "Proton login" },
+  { id: "webdav", name: "WebDAV", category: "Protocol", glyph: "󰒋", color: "#7E57C2",
+    authType: "credentials", defaultName: "WebDAV", authTag: "URL & login" }
+]
+
+function getProvider(id) {
+  for (var i = 0; i < ALL_PROVIDERS.length; i++) {
+    if (ALL_PROVIDERS[i].id === id) return ALL_PROVIDERS[i]
+  }
+  return null
+}
+
+// ------------------------------------------------------------ never-synced patterns
+// rclone glob patterns, as the daemon accepts them (lib/guac/filters.py)
+
+function patternProblem(p) {
+  if (p.indexOf("+ ") === 0) return "Only never-sync patterns go here; include rules belong in filters.txt"
+  if (p.indexOf("{{") !== -1) return "Regular expressions ({{…}}) can only go in filters.txt"
+  if (p.length > 300) return "That pattern is too long"
+  var braces = 0
+  for (var i = 0; i < p.length; i++) {
+    var c = p.charAt(i)
+    if (c === "\\") {
+      if (i + 1 >= p.length) return "A pattern can't end with \\"
+      i++
+    } else if (c === "[") {
+      var from = (p.charAt(i + 1) === "!" || p.charAt(i + 1) === "^") ? i + 3 : i + 2
+      var end = p.indexOf("]", from - 1)
+      if (end < 0) return "Close the [ with a ]"
+      i = end
+    } else if (c === "{") {
+      braces++
+    } else if (c === "}" && braces > 0) {
+      braces--
+    }
+  }
+  if (braces > 0) return "Close the { with a }"
+  return ""
+}
+
+// Comma- or line-separated patterns; commas inside {a,b} or [...] belong to the pattern
+function splitPatterns(text) {
+  var out = [], cur = "", depth = 0
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charAt(i)
+    if (c === "\\" && i + 1 < text.length) { cur += c + text.charAt(++i); continue }
+    if (c === "{" || c === "[") depth++
+    else if ((c === "}" || c === "]") && depth > 0) depth--
+    if ((c === "," && depth === 0) || c === "\n") { out.push(cur); cur = ""; continue }
+    cur += c
+  }
+  out.push(cur)
+  return out.map(function(p) { return p.trim().replace(/^- /, "").trim() })
+            .filter(function(p) { return p !== "" })
+}
+
+function explainPattern(p) {
+  var anchored = p.charAt(0) === "/"
+  var body = anchored ? p.slice(1) : p
+  var folder = false
+  if (/\/\*\*$/.test(body)) { folder = true; body = body.slice(0, -3) }
+  else if (/\/$/.test(body)) { folder = true; body = body.slice(0, -1) }
+  if (body === "" || body === "**") return "Everything"
+  var wild = /[*?\[\]{}]/.test(body)
+  var nested = body.indexOf("/") !== -1
+  var where = anchored ? (nested ? "from the folder's top" : "at the top level only")
+                       : "anywhere in the folder"
+  var what
+  var m
+  if (folder) {
+    what = (wild ? "Folders matching " : "Folders named ") + body + " and everything in them"
+  } else if ((m = /^\*\.([^*?\[\]{}\/]+)$/.exec(body))) {
+    what = "Files ending in ." + m[1]
+  } else if ((m = /^\*\.\{([^{}\/]+)\}$/.exec(body))) {
+    what = "Files ending in ." + m[1].split(",").join(" or .")
+  } else if ((m = /^([^*?\[\]{}\/]+)\*$/.exec(body))) {
+    what = "Names starting with " + m[1]
+  } else if (!wild && !nested) {
+    what = "Files named " + body
+  } else {
+    what = (nested ? "Paths matching " : "Names matching ") + body
+  }
+  return what + ", " + where
+}
+
+// What a text field holds, read as patterns to add: { patterns, explained, error }
+function parsePatterns(text, existing) {
+  var list = splitPatterns(String(text || ""))
+  var res = { patterns: [], explained: [], error: "" }
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i]
+    var problem = patternProblem(p)
+    if (!problem && ((existing || []).indexOf(p) !== -1 || res.patterns.indexOf(p) !== -1))
+      problem = p + " is already in the list"
+    if (problem) {
+      res.error = problem
+      return res
+    }
+    res.patterns.push(p)
+    res.explained.push((list.length > 1 ? p + ": " : "") + explainPattern(p))
+  }
+  return res
+}
+
+// The note above Save: what changes, and that the next sync is a safe one
+function filterChangeText(added, removed, modeChange, emptied) {
+  var parts = []
+  if (emptied) parts.push("Empty: this folder goes back to the global list")
+  else if (modeChange) parts.push(modeChange)
+  if (!emptied) {
+    if (added) parts.push(added + " added")
+    if (removed) parts.push(removed + " removed")
+  }
+  return parts.join(" · ") + ". The next sync is a safe resync: nothing is deleted and the newer copy wins."
+}

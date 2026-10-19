@@ -1,0 +1,19 @@
+[package]
+name = "omarchy-cloudkit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Cloud drives, streaming and safe two-way folder sync for Omarchy"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "process", "sync", "time", "signal", "fs"] }
+regex = "1"
+md5 = "0.7"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

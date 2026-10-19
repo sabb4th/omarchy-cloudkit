@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "local.cloudkit",
+  "name": "omarchy-cloudkit",
+  "version": "0.1.0",
+  "author": "omarchy-cloudkit contributors",
+  "license": "MIT",
+  "description": "Stream Google Drive, OneDrive, Dropbox, Nextcloud and any rclone remote, and keep the folders you choose on this device with two-way sync.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "ui/Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "CloudKit",
+    "description": "Stream cloud drives, keep chosen folders local and in sync, see quotas and recent files.",
+    "category": "Files",
+    "aliases": [
+      "cloudkit",
+      "omarchy-cloudkit",
+      "guacamole",
+      "cloud",
+      "rclone",
+      "gdrive",
+      "onedrive",
+      "dropbox",
+      "nextcloud",
+      "sync"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {},
+    "schema": []
+  }
+}

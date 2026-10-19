@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Compatibility command; no Python runtime.
+set -euo pipefail
+launcher=$(readlink -f -- "${BASH_SOURCE[0]}")
+plugin_bin=$(cd -- "$(dirname -- "$launcher")" && pwd)
+exec "$plugin_bin/omarchy-cloudkit" "$@"

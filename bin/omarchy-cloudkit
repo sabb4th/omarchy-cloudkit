@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+launcher=$(readlink -f -- "${BASH_SOURCE[0]}")
+plugin_bin=$(cd -- "$(dirname -- "$launcher")" && pwd)
+if [[ ! -x $plugin_bin/cloudkit-native ]]; then
+  printf '%s\n' 'omarchy-cloudkit has not been compiled. Run ./install.sh from the checkout.' >&2
+  exit 1
+fi
+exec "$plugin_bin/cloudkit-native" "$@"

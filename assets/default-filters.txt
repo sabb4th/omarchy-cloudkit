@@ -1,0 +1,23 @@
+# Files and folders that are never synced between the cloud and folders kept local.
+# rclone filter syntax: https://rclone.org/filtering/
+# Changing this file makes the next sync of every folder a full (safe, non-deleting) resync.
+- .~lock.*#
+- ~$*
+- .~*
+- *.tmp
+- *.temp
+- *.swp
+- *.swx
+- *~
+- *.part
+- *.partial
+- *.crdownload
+- .DS_Store
+- ._*
+- Thumbs.db
+- desktop.ini
+- .directory
+- .Trash-*/**
+- .goutputstream-*
+# Obsidian keeps per-device window layout here; syncing it only produces conflicts
+- .obsidian/workspace*.json

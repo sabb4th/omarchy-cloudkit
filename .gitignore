@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+/.venv/
+/target/
+/bin/guac-native
+/bin/cloudkit-native
+/.agents/
+/.codex/
+/.aws/
+.env
+.env.*
+!.env.example
+credentials.json
+rclone.conf
+*.pem
+*.key
