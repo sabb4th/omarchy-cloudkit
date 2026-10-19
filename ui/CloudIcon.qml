@@ -9,6 +9,8 @@ Item {
   property real iconSize: Style.font.icon
   property color color: Color.foreground
   property string fontFamily: Style.font.family
+  property string badge: ""
+  property bool monochrome: false
   property bool active: false
   property bool busy: false
   property bool attention: false
@@ -34,7 +36,7 @@ Item {
     visible: root.busy
     anchors.centerIn: parent
     text: "󰑐"
-    color: Color.accent
+    color: root.monochrome ? root.color : Color.accent
     font.family: root.fontFamily
     font.pixelSize: root.iconSize * 0.8
     transformOrigin: Item.Center
@@ -47,8 +49,18 @@ Item {
     }
   }
 
+  Text {
+    visible: root.badge !== ""
+    anchors.centerIn: parent
+    text: root.badge
+    color: root.color
+    font.family: root.fontFamily
+    font.pixelSize: root.iconSize * 0.65
+    font.bold: true
+  }
+
   Rectangle {
-    visible: root.attention
+    visible: root.attention && !root.monochrome
     width: Math.max(4, root.iconSize * 0.32)
     height: width
     radius: width / 2

@@ -4,8 +4,11 @@ Cliente de nuvem para Omarchy com serviço e CLI em **Rust**, integração com
 **rclone**, montagem **FUSE** e o painel QML/Quickshell do Clouds Guacamole.
 Não precisa de Python para executar, instalar ou usar o widget.
 
-Na barra, o ícone é apenas uma nuvem branca fixa. Os estados de sincronização,
-transferências e problemas continuam disponíveis no tooltip e no painel.
+Na barra, todos os indicadores são brancos: nuvem simples quando ocioso,
+check quando saudável, rotação durante sincronização, seta de envio para uploads
+do streaming, pausa (Ⅱ), alterações pendentes (…), offline (×) e erro (!).
+A sincronização bidirecional usa um indicador comum de atividade; o serviço
+não informa a direção de cada transferência. Detalhes ficam no tooltip e painel.
 
 Esta é uma migração em desenvolvimento. Os fluxos locais de montagem e
 sincronização foram exercitados com rclone real. Login OAuth e operações em

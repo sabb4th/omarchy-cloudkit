@@ -21,11 +21,34 @@ Panel {
   readonly property color statusColor: service.statusState === "error" ? root.urgent
                                        : (service.statusState === "online" ? "#6fa96f" : "#c9a24a")
 
+  readonly property string cloudState: {
+    if (service.attention || service.actionFailed || service.startError !== "") return "error"
+    if (!service.connected || !service.online) return "offline"
+    if (!service.ready) return "pending"
+    if (service.summary.syncing > 0) return "syncing"
+    if (service.summary.uploads > 0) return "uploading"
+    if (service.transfers.count > 0) return "syncing"
+    var paused = false
+    var pending = false
+    for (var i = 0; i < service.drives.length; i++) {
+      var folders = service.drives[i].folders || []
+      for (var j = 0; j < folders.length; j++) {
+        paused = paused || folders[j].paused === true
+        pending = pending || ["pending", "changes", "waiting"].indexOf(folders[j].state) >= 0
+      }
+    }
+    if (paused) return "paused"
+    if (pending) return "pending"
+    return service.statusState === "online" ? "synced" : "idle"
+  }
+
   readonly property string barTooltipText: {
     if (!service.connected) return "Clouds: " + (service.startError || "starting…")
     if (service.actionFailed && service.lastError !== "") return "Clouds: " + service.lastError
     if (!service.hasDrives) return "Clouds: click to connect a drive"
     var t = "Clouds: " + service.statusText
+    if (root.cloudState === "paused") t += " · paused folders"
+    if (root.cloudState === "pending") t += " · changes pending"
     if (service.transfers.count > 0 && service.transfers.speed > 0) t += " · " + Model.formatSpeed(service.transfers.speed)
     if (service.summary.attention > 0) t += " · " + service.summary.attention + " need attention"
     return t
@@ -81,8 +104,10 @@ Panel {
           iconSize: Style.bar.iconFont
           color: "#ffffff"
           fontFamily: root.fontFamily
-          active: true
-          busy: false
+          monochrome: true
+          active: root.cloudState === "synced"
+          busy: root.cloudState === "syncing"
+          badge: ({ error: "!", offline: "×", paused: "Ⅱ", pending: "…", uploading: "↑" })[root.cloudState] || ""
           attention: false
         }
       }
