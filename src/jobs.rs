@@ -8,20 +8,31 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{mpsc, watch};
-pub fn notify(cfg: &Value, title: &str, body: &str) {
+pub enum Notification {
+    Conflict,
+    Attention,
+}
+// Desktop notification arguments are visible through process listings. Only
+// fixed text belongs here; private filenames/errors stay in the authenticated UI.
+pub fn notify(cfg: &Value, kind: Notification) {
     if cfg["notifications"] == false {
         return;
     }
+    let (title, body) = match kind {
+        Notification::Conflict => (
+            "Sync conflict; both versions kept",
+            "Open CloudKit to review the conflicting copies.",
+        ),
+        Notification::Attention => (
+            "Cloud folder needs attention",
+            "Open CloudKit to review the synchronization problem.",
+        ),
+    };
     let mut c = tokio::process::Command::new("notify-send");
-    c.args([
-        "--app-name=omarchy-cloudkit",
-        "--",
-        &safe(title),
-        &safe(body),
-    ])
-    .stdin(std::process::Stdio::null())
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null());
+    c.args(["--app-name=omarchy-cloudkit", "--", title, body])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
     tokio::spawn(async move {
         if let Ok(mut p) = c.spawn() {
             let _ = tokio::time::timeout(Duration::from_secs(5), p.wait()).await;
@@ -156,7 +167,7 @@ pub async fn mount(
     let fs = format!("{name}:");
     tokio::spawn(async move {
         let _ = r
-            .call_timeout("vfs/refresh", json!({"fs":fs,"recursive":false}), 30)
+            .call_timeout("vfs/refresh", json!({"fs":fs,"recursive":"false"}), 30)
             .await;
         if let Ok(list)=r.call_timeout("operations/list",json!({"fs":fs,"remote":"","opt":{"dirsOnly":true,"noModTime":true,"noMimeType":true}}),30).await {
             let mut params=json!({"fs":fs});
@@ -225,6 +236,9 @@ async fn sync_inner(
     let backup = paths.backup(id).join(format!("day-{stamp}"));
     private(&backup)?;
     let mut params = json!({"path1":rc::spec(text(&f["remote"]),kind,text(&f["path"])),"path2":link,"workdir":paths.work(id),"filtersFile":filter_path,"createEmptySrcDirs":true,"compare":"size,modtime","conflictResolve":"newer","conflictLoser":"num","conflictSuffix":"conflict","resilient":true,"recover":true,"maxLock":"5m","maxDelete":50,"backupDir2":backup,"_async":true,"_group":format!("cloudkit/{id}"),"_config":{"SuffixKeepExtension":true}});
+    params["_config"]["Transfers"] =
+        json!(f["transfer_options"]["Transfers"].as_u64().unwrap_or(4));
+    params["_config"]["Checkers"] = json!(f["transfer_options"]["Checkers"].as_u64().unwrap_or(8));
     if f["run_resync"] == true {
         params["resync"] = json!(true);
         params["resyncMode"] = json!("newer");

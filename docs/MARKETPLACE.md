@@ -1,6 +1,6 @@
 # Marketplace preparation
 
-Plugin: **omarchy-cloudkit**, version **0.2.0**, ID **sabb4th.cloudkit**.
+Plugin: **omarchy-cloudkit**, version **0.3.0**, ID **sabb4th.cloudkit**.
 Repository: https://github.com/sabb4th/omarchy-cloudkit
 Category: **Productivity**. Tags: **bar, quickshell, system**.
 

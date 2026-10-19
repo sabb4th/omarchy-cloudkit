@@ -273,7 +273,7 @@ pub fn main() -> Result<()> {
     };
     if ["--help", "-h", "help"].contains(&cmd) || flag("--help") {
         println!(
-            "omarchy-cloudkit — cloud drives and safe two-way sync\nCommands: power on|off|status, status [--json], daemon [--ensure], stop, watch, bridge, busy,\nstream DRIVE on|off [--force], mount DRIVE, unmount DRIVE [--force],\nstream-all on|off, keep REMOTE:PATH [LOCAL], unkeep FOLDER [--delete-local],\nsync [FOLDER], pause|resume FOLDER..., alias FOLDER LABEL,\nexclude [FOLDER] [--add PATTERN] [--remove PATTERN] [--global],\nresolve FOLDER resync|force|dismiss, browse REMOTE:PATH, size REMOTE:PATH,\nadd-oauth NAME PROVIDER [--own-client] [--client-id ID --client-secret-stdin],\nadd-credentials NAME PROVIDER < credentials.json, set-client-id DRIVE,\nclient-guide PROVIDER, reconnect DRIVE, retry DRIVE, takeover DRIVE,\nremove DRIVE [-y], label DRIVE LABEL, set-path DRIVE PATH,\nconfig [KEY [VALUE]], log [-n N] [--daemon], open [DRIVE], service install|uninstall"
+            "omarchy-cloudkit — cloud drives and safe two-way sync\nCommands: power on|off|status, status [--json], daemon [--ensure], stop, watch, bridge, busy,\nstream DRIVE on|off [--force], mount DRIVE, unmount DRIVE [--force],\nstream-all on|off, keep REMOTE:PATH [LOCAL], unkeep FOLDER [--delete-local],\nsync [FOLDER], pause|resume FOLDER..., alias FOLDER LABEL,\nexclude [FOLDER] [--add PATTERN] [--remove PATTERN] [--global],\nresolve FOLDER resync|force|dismiss, browse REMOTE:PATH, size REMOTE:PATH,\nadd-oauth NAME PROVIDER [--own-client] [--client-id ID --client-secret-stdin],\nadd-credentials NAME PROVIDER < credentials.json, set-client-id DRIVE,\nclient-guide PROVIDER, reconnect DRIVE, retry DRIVE, takeover DRIVE,\nremove DRIVE [-y], label DRIVE LABEL, set-path DRIVE PATH,\nconfig [KEY [VALUE]], log [-n N] [--daemon], open [DRIVE], service install|uninstall|status"
         );
         return Ok(());
     }
@@ -358,6 +358,20 @@ pub fn main() -> Result<()> {
     if cmd == "service" {
         let paths = Paths::new();
         match arg(0) {
+            "status" => {
+                let installed = paths.unit().is_file();
+                let enabled = installed
+                    && Command::new("systemctl")
+                        .args([
+                            "--user",
+                            "is-enabled",
+                            "--quiet",
+                            "omarchy-cloudkit.service",
+                        ])
+                        .status()
+                        .is_ok_and(|s| s.success());
+                println!("{}", json!({"installed":installed,"enabled":enabled}));
+            }
             "install" => {
                 let exe = env::current_exe().map_err(|e| e.to_string())?;
                 let p = exe.to_string_lossy();
@@ -397,7 +411,7 @@ pub fn main() -> Result<()> {
                     .args(["--user", "daemon-reload"])
                     .status();
             }
-            _ => return Err("Expected service install|uninstall".into()),
+            _ => return Err("Expected service install|uninstall|status".into()),
         }
         return Ok(());
     }

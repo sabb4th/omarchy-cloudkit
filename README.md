@@ -4,7 +4,8 @@ Cliente de nuvem para Omarchy com serviço e CLI em **Rust**, integração com
 **rclone**, montagem **FUSE** e o painel QML/Quickshell do Clouds Guacamole.
 Não precisa de Python para executar, instalar ou usar o widget.
 
-Na barra, todos os indicadores são brancos: nuvem simples quando ocioso,
+Na barra, todos os indicadores acompanham dinamicamente a cor do tema da barra:
+nuvem simples quando ocioso,
 check quando saudável, rotação durante sincronização, seta de envio para uploads
 do streaming, pausa (Ⅱ), alterações pendentes (…), offline (×), erro (!) e desligado (⏻).
 A sincronização bidirecional usa um indicador comum de atividade; o serviço
@@ -25,20 +26,44 @@ estável. A reescrita não constitui garantia de ausência de bugs.
 - Pastas reais em `~/Cloud/Sync` para trabalho offline, sincronizadas nos dois
   sentidos por `rclone bisync`. Alterações locais usam inotify e debounce;
   alterações remotas chegam periodicamente, ao retomar ou por solicitação.
-- Até três sincronizações simultâneas, pausa por pasta, apelidos e caminhos
-  personalizados.
+- Paralelismo configurável (padrão: três pastas simultâneas), pausa por pasta,
+  apelidos e caminhos personalizados.
 - Cópias de conflito, limite de 50% de exclusões, backups locais, ressincronização
   sem propagar exclusões e reparo automático limitado com estado persistido.
 - Filtros globais ou próprios por pasta, editor no painel e ressincronização
   segura após mudanças de regras.
 - Guias de cliente OAuth próprio, reconexão, navegação remota, cotas, recentes,
   notificações, visualizador de logs, CLI e serviço systemd de usuário opcional.
+- Notificações genéricas, sem nomes de arquivos ou erros privados nos argumentos
+  de processos. Os detalhes ficam no painel e no estado privado.
 - Sockets privados e autenticados por UID; credenciais fora dos argumentos dos
   processos; escritas atômicas e escape de controles no terminal e nos logs.
 
 Filtros próprios **substituem** os globais. Pausar permite que uma sincronização
 já iniciada termine. Os backups protegem arquivos locais substituídos ou
 apagados; não são um histórico completo da nuvem.
+
+## Configurar pelo painel
+
+Clique na nuvem e depois na engrenagem. O seletor de seção organiza os controles:
+
+- **Geral**: chave geral, notificações e serviço opcional no login.
+- **Contas e pastas**: adicionar uma sincronização informando conta, caminho na
+  nuvem e pasta local; navegar na nuvem; controlar streaming de cada conta;
+  pausar, sincronizar, renomear, filtrar ou remover pastas existentes.
+- **Sincronização e desempenho**: intervalo remoto, transferências simultâneas
+  por pasta (1–32), verificações por pasta (1–64) e pastas simultâneas (1–8).
+  Padrões preservados: 4 transferências, 8 verificações e 3 pastas. Alterações
+  de paralelismo valem para os próximos trabalhos, sem interromper os atuais.
+- **Cache do streaming**: tamanho máximo, reserva mínima de espaço e idade
+  máxima (`24h`, `7d`, `720h`). Mudanças valem para a próxima montagem.
+- **Caminhos e proteção local**: raiz das montagens, pasta local padrão de novas
+  sincronizações e retenção das versões locais anteriores.
+- **Ferramentas, filtros e logs**: motor, logs, exclusões globais e backups locais.
+
+Os campos explicam o efeito de cada opção. Mudar a pasta local padrão não move
+sincronizações existentes nem escolhe o destino na nuvem. A criação de pastas no
+painel continua usando sincronização **bidirecional**, incluindo exclusões.
 
 ## Chave geral e economia de recursos
 

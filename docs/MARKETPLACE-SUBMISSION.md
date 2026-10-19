@@ -16,10 +16,14 @@ _No response_
 
 ### Maintainer notes
 
-omarchy-cloudkit 0.2.0 (plugin ID: sabb4th.cloudkit) is a Rust rewrite of Clouds
+omarchy-cloudkit 0.3.0 (plugin ID: sabb4th.cloudkit) is a Rust rewrite of Clouds
 Guacamole with retained MIT notices and attribution. It integrates rclone cloud
 streaming, FUSE mounts, bidirectional offline folder sync, and a QML bar panel.
 The global power switch stops background processes and persists across sessions.
+Notification process arguments contain only fixed generic text; private filenames
+and errors stay in the authenticated panel/private state.
+Version 0.3.0 follows the live bar theme and exposes folder mapping, cache,
+parallelism and optional login service controls in a sectioned settings panel.
 
 Manual setup is required: after adding the repository without --enable, run
 ./install.sh --in-place from ~/.config/omarchy/plugins/sabb4th.cloudkit.

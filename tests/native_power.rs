@@ -59,6 +59,12 @@ fn power_off_survives_restart_and_power_on_restores_the_engine() {
     let p = Profile::new();
     assert_eq!(p.power("status")["enabled"], true);
     assert_eq!(p.power("off")["enabled"], false);
+    let login = p.command().args(["service", "status"]).output().unwrap();
+    assert!(login.status.success());
+    let login: serde_json::Value = serde_json::from_slice(&login.stdout).unwrap();
+    assert_eq!(login["installed"], false);
+    assert_eq!(login["enabled"], false);
+    assert!(!p.0.join("run/omarchy-cloudkit/daemon.sock").exists());
     assert_eq!(p.power("off")["enabled"], false);
     let disabled_daemon = p.command().arg("daemon").output().unwrap();
     assert!(disabled_daemon.status.success());

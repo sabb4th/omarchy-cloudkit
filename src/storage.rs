@@ -248,7 +248,7 @@ pub fn new_id() -> u32 {
     }
 }
 pub fn defaults() -> Value {
-    json!({"version":1,"mount_root":"~/Cloud/Stream","local_root":"~/Cloud/Sync","cache_max_size_gb":20,"cache_max_age":"720h","cache_min_free_gb":5,"sync_interval_min":5,"notifications":true,"backup_days":30,"remotes":{}})
+    json!({"version":1,"mount_root":"~/Cloud/Stream","local_root":"~/Cloud/Sync","cache_max_size_gb":20,"cache_max_age":"720h","cache_min_free_gb":5,"sync_interval_min":5,"sync_transfers":4,"sync_checkers":8,"max_parallel_syncs":3,"notifications":true,"backup_days":30,"remotes":{}})
 }
 pub const SETTINGS: &[&str] = &[
     "mount_root",
@@ -257,6 +257,9 @@ pub const SETTINGS: &[&str] = &[
     "cache_max_age",
     "cache_min_free_gb",
     "sync_interval_min",
+    "sync_transfers",
+    "sync_checkers",
+    "max_parallel_syncs",
     "notifications",
     "backup_days",
 ];
@@ -282,12 +285,33 @@ pub fn coerce(key: &str, value: &Value) -> Result<Value> {
         if key == "sync_interval_min" && n < 1 {
             return Err("sync_interval_min must be at least 1".into());
         }
+        let bound = match key {
+            "sync_transfers" => Some(32),
+            "sync_checkers" => Some(64),
+            "max_parallel_syncs" => Some(8),
+            _ => None,
+        };
+        if let Some(max) = bound
+            && !(1..=max).contains(&n)
+        {
+            return Err(format!("{key} must be between 1 and {max}"));
+        }
         return Ok(json!(n));
     }
     if text(value).trim().is_empty() {
         return Err("Value cannot be empty".into());
     }
-    Ok(json!(text(value).trim()))
+    let value = text(value).trim();
+    if key == "cache_max_age"
+        && value != "0"
+        && value != "off"
+        && !regex::Regex::new(r"^(?:[0-9]+(?:\.[0-9]+)?(?:ns|us|ms|s|m|h|d|w|M|y))+$")
+            .unwrap()
+            .is_match(value)
+    {
+        return Err("Use a cache duration such as 24h, 7d or 1h30m".into());
+    }
+    Ok(json!(value))
 }
 pub fn load(paths: &Paths) -> Result<(Value, Value)> {
     private(&paths.config)?;
@@ -416,6 +440,25 @@ mod tests {
         ] {
             assert_eq!(classify(s), k);
         }
+    }
+    #[test]
+    fn performance_and_cache_settings_are_validated_before_saving() {
+        for (key, valid, invalid) in [
+            ("sync_transfers", 32, 33),
+            ("sync_checkers", 64, 65),
+            ("max_parallel_syncs", 8, 9),
+        ] {
+            assert!(coerce(key, &json!(valid)).is_ok());
+            assert!(coerce(key, &json!(0)).is_err());
+            assert!(coerce(key, &json!(invalid)).is_err());
+        }
+        for duration in ["24h", "7d", "1h30m", "720h", "0", "off"] {
+            assert!(coerce("cache_max_age", &json!(duration)).is_ok());
+        }
+        for invalid in ["", "forever", "-1h", "7days", "1h garbage"] {
+            assert!(coerce("cache_max_age", &json!(invalid)).is_err());
+        }
+        assert_eq!(coerce("cache_min_free_gb", &json!(0)).unwrap(), 0);
     }
     #[test]
     fn invalid_json_is_never_overwritten() {

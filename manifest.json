@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sabb4th.cloudkit",
   "name": "omarchy-cloudkit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "sabb4th",
   "license": "MIT",
   "description": "Stream Google Drive, OneDrive, Dropbox, Nextcloud and any rclone remote, and keep the folders you choose on this device with two-way sync.",

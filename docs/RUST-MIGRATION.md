@@ -105,11 +105,12 @@ rclone sob a mesma carga, versão de rclone, cache e perfil.
 
 ## Validação desta implementação
 
-- `cargo test --locked`: 15 testes unitários Rust, 3 testes IPC e 1 teste de ciclo de energia.
-- `tests/test_daemon.py` com o release Rust: 21 cenários anteriores aprovados; teste adicional de desligamento global com FUSE.
+- `cargo test --locked`: 16 testes unitários Rust, 3 testes IPC e 1 teste de ciclo de energia.
+- `tests/test_daemon.py` com o release Rust: 24 cenários cobertos, incluindo desligamento global com FUSE, edição de paralelismo/cache e privacidade das notificações.
 - `tests/test_ipc.py`: 15 testes aprovados, incluindo ponte nativa e widget offscreen.
 - `tests/test_install.py`: 10 testes aprovados, incluindo falha de cópia e execução sem Python.
 - `tests/test_power_widget.py`: botão QML liga/desliga, respeita CLI e não reconecta desligado.
+- `tests/test_settings_widget.py`: campos, mapeamento local/remoto e atualização da paleta ao vivo.
 - Build release, Clippy com warnings como erros, rustfmt e sintaxe Bash aprovados.
 
 Após colocar o catálogo fixo de provedores em cache, os testes Rust e os cenários

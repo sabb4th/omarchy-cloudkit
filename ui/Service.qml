@@ -16,6 +16,10 @@ Item {
   // ---- daemon state (replaced wholesale on every push)
   // Persisted by the native CLI. No daemon, bridge or retry timer runs while off.
   property bool powered: true
+  property bool loginEnabled: false
+  property bool loginReady: false
+  readonly property bool loginChanging: loginProc.running
+  property string _loginOperation: "status"
   property bool powerReady: false
   property bool powerChanging: powerProc.running
   property string _powerOperation: "status"
@@ -253,6 +257,40 @@ Item {
   function syncNow(id) { act("sync_now", id ? { id: id } : {}, "") }
   function resolveFolder(id, action) { act("resolve", { id: id, action: action }, "") }
   function clearConflicts(id) { request("clear_conflicts", { id: id }) }
+
+  function checkLoginService() {
+    if (pluginDir === "" || loginProc.running) return
+    _loginOperation = "status"
+    loginProc.command = [cli, "service", "status"]
+    loginProc.running = true
+  }
+  function setLoginService(on) {
+    if (loginProc.running) return
+    _loginOperation = on ? "install" : "uninstall"
+    loginProc.command = [cli, "service", _loginOperation]
+    loginProc.running = true
+  }
+  Process {
+    id: loginProc
+    stdout: StdioCollector { id: loginOut }
+    stderr: StdioCollector { id: loginErr }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.loginReady = false
+        root.lastError = String(loginErr.text || "Could not update login service").trim()
+        root.actionFailed = true
+        return
+      }
+      if (root._loginOperation === "status") {
+        try {
+          root.loginEnabled = JSON.parse(loginOut.text).enabled === true
+          root.loginReady = true
+        } catch (e) { root.loginReady = false }
+      } else {
+        Qt.callLater(root.checkLoginService)
+      }
+    }
+  }
 
   function setSetting(key, value) { act("set_setting", { key: key, value: value }, "Saving…") }
   function touch() { request("touch", {}) }

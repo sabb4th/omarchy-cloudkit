@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -8,14 +9,25 @@ Item {
   id: root
 
   property var service: null
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
 
   signal back()
   signal logRequested()
+  signal browseRequested(string remote)
+  signal addAccountRequested()
+  property bool addingFolder: false
+  property bool loaded: false
+  property string activeSection: "general"
+  property string selectedRemote: ""
+  readonly property var driveOptions: service ? service.drives.map(function(d) { return { value: d.name, label: d.label || d.name } }) : []
 
   readonly property color dim: Qt.darker(foreground, 1.6)
   readonly property var s: service ? service.appSettings : ({})
+  onDriveOptionsChanged: {
+    if (!driveOptions.some(function(d) { return d.value === root.selectedRemote }))
+      selectedRemote = driveOptions.length > 0 ? driveOptions[0].value : ""
+  }
   property bool editingFilters: false
   readonly property var globalExcludes: service ? (service.filters.excludes || []) : []
   // Folders with their own list, which the global one doesn't reach
@@ -29,6 +41,7 @@ Item {
   }
 
   function openFilters() {
+    activeSection = "advanced"
     filterEditor.reset(globalExcludes, globalExcludes)
     editingFilters = true
   }
@@ -38,10 +51,58 @@ Item {
   function load() {
     mountRootField.text = String(s.mount_root || "")
     localRootField.text = String(s.local_root || "")
-    cacheSizeField.value = Number(s.cache_max_size_gb || 20)
-    intervalField.value = Number(s.sync_interval_min || 5)
-    backupField.value = Number(s.backup_days || 30)
+    cacheAgeField.text = String(s.cache_max_age || "720h")
+    if (!driveOptions.some(function(d) { return d.value === root.selectedRemote }))
+      selectedRemote = driveOptions.length > 0 ? driveOptions[0].value : ""
+    loaded = service && service.ready
     editingFilters = false
+    if (service) service.checkLoginService()
+  }
+
+  Connections {
+    target: root.service
+    function onStateUpdated() { if (root.visible && !root.loaded && root.service.ready) root.load() }
+  }
+
+  component Card: BorderSurface {
+    default property alias contents: cardCol.data
+    Layout.fillWidth: true
+    implicitHeight: cardCol.implicitHeight + Style.space(20)
+    radius: Style.cornerRadius
+    color: Commons.Util.alpha(root.foreground, 0.03)
+    borderSpec: Border.controlSpec("normal", root.foreground, Commons.Color.accent)
+    ColumnLayout {
+      id: cardCol
+      anchors { left: parent.left; right: parent.right; top: parent.top; margins: Style.space(10) }
+      spacing: Style.space(10)
+    }
+  }
+
+  component NumericSetting: RowLayout {
+    property string title: ""
+    property string hint: ""
+    property string settingKey: ""
+    property int minimum: 0
+    property int maximum: 100
+    property int fallback: 0
+    id: settingRow
+    Layout.fillWidth: true
+    spacing: Style.space(8)
+    ColumnLayout {
+      Layout.fillWidth: true
+      spacing: 0
+      Label { text: settingRow.title; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+      Hint { text: settingRow.hint }
+    }
+    NumberField {
+      objectName: settingRow.settingKey
+      value: root.s[settingRow.settingKey] === undefined ? settingRow.fallback : Number(root.s[settingRow.settingKey])
+      from: settingRow.minimum
+      to: settingRow.maximum
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onModified: function(v) { root.service.setSetting(settingRow.settingKey, v) }
+    }
   }
 
   component Label: Text {
@@ -77,10 +138,10 @@ Item {
     implicitHeight: tileCol.implicitHeight + Style.space(16)
     radius: Style.cornerRadius
     opacity: enabled ? 1 : 0.45
-    color: tileMouse.pressed ? Style.pressedFillFor(root.foreground, Color.accent)
-         : tileMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent)
-         : tile.active ? Qt.alpha(Color.accent, 0.10) : "transparent"
-    borderSpec: Border.controlSpec(tile.active ? "selected" : (tileMouse.containsMouse ? "hover-cursor" : "normal"), root.foreground, Color.accent)
+    color: tileMouse.pressed ? Style.pressedFillFor(root.foreground, Commons.Color.accent)
+         : tileMouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent)
+         : tile.active ? Commons.Util.alpha(Commons.Color.accent, 0.10) : "transparent"
+    borderSpec: Border.controlSpec(tile.active ? "selected" : (tileMouse.containsMouse ? "hover-cursor" : "normal"), root.foreground, Commons.Color.accent)
 
     Column {
       id: tileCol
@@ -92,7 +153,7 @@ Item {
         text: tile.iconText
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
-        color: tileMouse.containsMouse || tile.active ? Color.accent : root.foreground
+        color: tileMouse.containsMouse || tile.active ? Commons.Color.accent : root.foreground
       }
 
       Text {
@@ -132,7 +193,7 @@ Item {
 
       Button {
         iconText: "󰁍"
-        text: "Back"
+        text: "Voltar"
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
         foreground: root.foreground
@@ -142,7 +203,7 @@ Item {
 
       Text {
         Layout.fillWidth: true
-        text: "Settings"
+        text: "Configurações"
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -150,150 +211,308 @@ Item {
       }
     }
 
-    BorderSurface {
+    Dropdown {
+      objectName: "settingsSection"
       Layout.fillWidth: true
-      implicitHeight: cfgCol.implicitHeight + Style.space(20)
-      radius: Style.cornerRadius
-      color: Qt.rgba(1, 1, 1, 0.03)
-      borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+      showLabel: false
+      value: root.activeSection
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      options: [
+        { value: "general", label: "Geral" },
+        { value: "folders", label: "Contas e pastas" },
+        { value: "sync", label: "Sincronização e desempenho" },
+        { value: "cache", label: "Cache do streaming" },
+        { value: "paths", label: "Caminhos e proteção local" },
+        { value: "advanced", label: "Ferramentas, filtros e logs" }
+      ]
+      onChanged: function(v) { root.activeSection = v }
+    }
 
-      ColumnLayout {
-        id: cfgCol
-        anchors {
-          fill: parent
-          margins: Style.space(10)
-        }
-        spacing: Style.space(10)
-
+    Card {
+      visible: root.activeSection === "general"
+      Label { text: "Funcionamento" }
+      RowLayout {
+        Layout.fillWidth: true
         ColumnLayout {
           Layout.fillWidth: true
-          spacing: Style.space(4)
-          Label { text: "Stream drives in" }
-          RowLayout {
-            Layout.fillWidth: true
-            TextField {
-              id: mountRootField
-              Layout.fillWidth: true
-              placeholderText: "~/Cloud/Stream"
-              onAccepted: root.service.setSetting("mount_root", text.trim())
-            }
-            Button {
-              text: "Save"
-              fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              foreground: root.foreground
-              bordered: true
-              onClicked: root.service.setSetting("mount_root", mountRootField.text.trim())
-            }
-          }
-          Hint { text: "Each drive appears here as a folder, streamed on demand: files download when you open them, and only those are cached." }
+          Label { text: "Chave geral" }
+          Hint { text: "Desliga sincronização, streaming e processos em segundo plano. O botão permanece na barra para religar." }
         }
-
+        ToggleSwitch {
+          checked: root.service.powered
+          enabled: root.service.powerReady && !root.service.powerChanging
+          foreground: root.foreground
+          onToggled: root.service.setPower(!root.service.powered)
+        }
+      }
+      RowLayout {
+        Layout.fillWidth: true
         ColumnLayout {
           Layout.fillWidth: true
-          spacing: Style.space(4)
-          Label { text: "Sync folders kept on this device in" }
+          Label { text: "Serviço no login" }
+          Hint { text: "Inicia o serviço mesmo sem o widget na barra. A chave geral desligada continua sendo respeitada." }
+        }
+        ToggleSwitch {
+          objectName: "loginServiceSwitch"
+          checked: root.service.loginEnabled
+          enabled: root.service.loginReady && !root.service.loginChanging
+          foreground: root.foreground
+          onToggled: root.service.setLoginService(!root.service.loginEnabled)
+        }
+      }
+      RowLayout {
+        Layout.fillWidth: true
+        ColumnLayout {
+          Layout.fillWidth: true
+          Label { text: "Notificações" }
+          Hint { text: "Avisos de conflitos e problemas que precisam de atenção." }
+        }
+        ToggleSwitch {
+          checked: root.s.notifications === true
+          enabled: root.service.ready
+          foreground: root.foreground
+          onToggled: root.service.setSetting("notifications", !(root.s.notifications === true))
+        }
+      }
+      Hint {
+        visible: !root.service.ready
+        text: root.service.powerChanging ? root.service.statusText : "Ligue a chave geral para editar as configurações de sincronização e cache."
+      }
+    }
+
+    Card {
+      visible: root.activeSection === "folders"
+      enabled: root.service.ready
+      opacity: enabled ? 1 : 0.5
+      Label { text: "Adicionar pasta sincronizada" }
+      Hint { text: "Escolha os dois caminhos diretamente. A sincronização é bidirecional: alterações e exclusões podem chegar aos dois lados. Não é backup somente de envio." }
+      Dropdown {
+        id: driveChoice
+        objectName: "syncDriveChoice"
+        Layout.fillWidth: true
+        label: "Conta"
+        value: root.selectedRemote
+        options: root.driveOptions
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onChanged: function(v) { root.selectedRemote = v }
+      }
+      Label { text: "Pasta dentro da nuvem" }
+      TextField {
+        id: remotePathField
+        objectName: "syncRemotePath"
+        Layout.fillWidth: true
+        placeholderText: "Thinkpad/Documents"
+      }
+      Label { text: "Pasta neste computador" }
+      TextField {
+        id: syncLocalField
+        objectName: "syncLocalPath"
+        Layout.fillWidth: true
+        placeholderText: "~/Documents"
+      }
+      Hint { text: "O caminho da nuvem é relativo à conta selecionada. Os arquivos existentes nos dois lados serão combinados na primeira sincronização." }
+      RowLayout {
+        Layout.fillWidth: true
+        Button {
+          objectName: "addSyncFolder"
+          text: root.addingFolder ? "Adicionando…" : "Adicionar pasta"
+          enabled: !root.addingFolder && root.selectedRemote !== "" && remotePathField.text.trim() !== "" && syncLocalField.text.trim() !== ""
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          bordered: true
+          onClicked: {
+            root.addingFolder = true
+            root.service.addFolder(root.selectedRemote, remotePathField.text.trim(), syncLocalField.text.trim(), 0, function(ok) {
+              root.addingFolder = false
+              if (ok) {
+                remotePathField.text = ""
+                syncLocalField.text = ""
+              }
+            })
+          }
+        }
+        Button {
+          text: "Navegar na nuvem"
+          enabled: root.selectedRemote !== ""
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onClicked: root.browseRequested(root.selectedRemote)
+        }
+      }
+      Button {
+        visible: root.driveOptions.length === 0
+        text: "Conectar uma conta"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onClicked: root.addAccountRequested()
+      }
+    }
+
+    Card {
+      visible: root.activeSection === "folders"
+      enabled: root.service.ready
+      opacity: enabled ? 1 : 0.5
+      Label { text: "Contas e pastas existentes" }
+      Hint { text: "A chave de cada conta controla o streaming. Use os controles de cada pasta para pausar, sincronizar, renomear, filtrar ou remover a sincronização." }
+      Repeater {
+        model: root.service.drives
+        delegate: ColumnLayout {
+          id: account
+          required property var modelData
+          Layout.fillWidth: true
+          spacing: Style.space(6)
           RowLayout {
             Layout.fillWidth: true
-            TextField {
-              id: localRootField
-              Layout.fillWidth: true
-              placeholderText: "~/Cloud/Sync"
-              onAccepted: root.service.setSetting("local_root", text.trim())
-            }
-            Button {
-              text: "Save"
-              fontFamily: root.fontFamily
-              fontSize: Style.font.caption
+            Label { Layout.fillWidth: true; text: account.modelData.label || account.modelData.name }
+            Text { text: "Streaming"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+            ToggleSwitch {
+              checked: account.modelData.stream === true
               foreground: root.foreground
-              bordered: true
-              onClicked: root.service.setSetting("local_root", localRootField.text.trim())
+              onToggled: root.service.setStream(account.modelData.name, !(account.modelData.stream === true), false)
             }
           }
-          Hint { text: "Where folders you keep on this device go by default, synced both ways. Each one can also go anywhere you like." }
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-            Label { text: "Stream cache size (GB)" }
-            Hint { text: "Files you open stay cached for instant reopening; the least recently used go first." }
-          }
-          NumberField {
-            id: cacheSizeField
-            from: 1
-            to: 4000
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onModified: function(v) { root.service.setSetting("cache_max_size_gb", v) }
-          }
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-            Label { text: "Check the cloud every (min)" }
-            Hint { text: "Local edits sync within seconds; this is how often cloud-side changes are picked up." }
-          }
-          NumberField {
-            id: intervalField
-            from: 1
-            to: 240
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onModified: function(v) { root.service.setSetting("sync_interval_min", v) }
-          }
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-            Label { text: "Keep replaced local files (days)" }
-            Hint { text: "Local files a sync overwrote or deleted are moved aside, not lost." }
-          }
-          NumberField {
-            id: backupField
-            from: 1
-            to: 365
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onModified: function(v) { root.service.setSetting("backup_days", v) }
-          }
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-            Label { text: "Notifications" }
-            Hint { text: "Conflicts and problems that need you." }
-          }
-          ToggleSwitch {
-            checked: root.s.notifications === true
-            foreground: root.foreground
-            onToggled: root.service.setSetting("notifications", !(root.s.notifications === true))
+          Repeater {
+            model: account.modelData.folders || []
+            delegate: ColumnLayout {
+              id: folderEntry
+              required property var modelData
+              Layout.fillWidth: true
+              spacing: Style.space(2)
+              Hint {
+                text: account.modelData.name + ":" + folderEntry.modelData.path + " ↔ " + Model.tildify(folderEntry.modelData.local, root.service.home)
+              }
+              FolderRow {
+                Layout.fillWidth: true
+                folder: folderEntry.modelData
+                service: root.service
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                home: root.service.home
+                animate: root.visible && root.service.powered
+              }
+            }
           }
         }
       }
     }
 
+    Card {
+      visible: root.activeSection === "sync"
+      enabled: root.service.ready
+      opacity: enabled ? 1 : 0.5
+      Label { text: "Sincronização e desempenho" }
+      NumericSetting {
+        title: "Verificar a nuvem a cada (min)"
+        hint: "Mudanças locais são detectadas em segundos; este intervalo procura mudanças na nuvem."
+        settingKey: "sync_interval_min"; minimum: 1; maximum: 240; fallback: 5
+      }
+      NumericSetting {
+        title: "Transferências por pasta"
+        hint: "Padrão: 4. Mais transferências podem ajudar com arquivos pequenos, mas usam mais recursos e chamadas ao provedor."
+        settingKey: "sync_transfers"; minimum: 1; maximum: 32; fallback: 4
+      }
+      NumericSetting {
+        title: "Verificações por pasta"
+        hint: "Quantidade de arquivos comparados em paralelo. Padrão: 8."
+        settingKey: "sync_checkers"; minimum: 1; maximum: 64; fallback: 8
+      }
+      NumericSetting {
+        title: "Pastas simultâneas"
+        hint: "Padrão: 3. Reduza para economizar memória, CPU e conexões."
+        settingKey: "max_parallel_syncs"; minimum: 1; maximum: 8; fallback: 3
+      }
+      Hint { text: "As opções de paralelismo valem para as próximas sincronizações. Transferências já iniciadas continuam com os valores anteriores." }
+    }
+
+    Card {
+      visible: root.activeSection === "cache"
+      enabled: root.service.ready
+      opacity: enabled ? 1 : 0.5
+      Label { text: "Cache do streaming" }
+      NumericSetting {
+        title: "Tamanho máximo (GB)"
+        hint: "Arquivos acessados ficam no cache. 0 desativa o limite de tamanho; não é um limite rígido durante o uso."
+        settingKey: "cache_max_size_gb"; minimum: 0; maximum: 4000; fallback: 20
+      }
+      NumericSetting {
+        title: "Espaço livre mínimo (GB)"
+        hint: "O rclone tenta liberar cache para manter este espaço disponível. 0 desativa esta reserva."
+        settingKey: "cache_min_free_gb"; minimum: 0; maximum: 4000; fallback: 5
+      }
+      Label { text: "Idade máxima do cache" }
+      RowLayout {
+        Layout.fillWidth: true
+        TextField {
+          id: cacheAgeField
+          objectName: "cacheMaxAge"
+          Layout.fillWidth: true
+          placeholderText: "720h"
+          onAccepted: root.service.setSetting("cache_max_age", text.trim())
+        }
+        Button {
+          text: "Salvar"
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          bordered: true
+          onClicked: root.service.setSetting("cache_max_age", cacheAgeField.text.trim())
+        }
+      }
+      Hint { text: "Exemplos: 24h, 7d ou 720h. As configurações de cache serão usadas na próxima montagem da conta; a sincronização de pastas não usa esse cache." }
+    }
+
+    Card {
+      visible: root.activeSection === "paths"
+      enabled: root.service.ready
+      opacity: enabled ? 1 : 0.5
+      Label { text: "Caminhos e proteção local" }
+      Label { text: "Montar contas em" }
+      RowLayout {
+        Layout.fillWidth: true
+        TextField {
+          id: mountRootField
+          objectName: "mountRootPath"
+          Layout.fillWidth: true
+          placeholderText: "~/Cloud/Stream"
+          onAccepted: root.service.setSetting("mount_root", text.trim())
+        }
+        Button {
+          text: "Salvar"; foreground: root.foreground; fontFamily: root.fontFamily; bordered: true
+          onClicked: root.service.setSetting("mount_root", mountRootField.text.trim())
+        }
+      }
+      Hint { text: "Cada conta sem caminho próprio é montada em uma subpasta deste diretório. Mudar o caminho remonta essas contas." }
+      Label { text: "Pasta local padrão para novas sincronizações" }
+      RowLayout {
+        Layout.fillWidth: true
+        TextField {
+          id: localRootField
+          objectName: "localRootPath"
+          Layout.fillWidth: true
+          placeholderText: "~/Cloud/Sync"
+          onAccepted: root.service.setSetting("local_root", text.trim())
+        }
+        Button {
+          text: "Salvar"; foreground: root.foreground; fontFamily: root.fontFamily; bordered: true
+          onClicked: root.service.setSetting("local_root", localRootField.text.trim())
+        }
+      }
+      Hint { text: "É apenas o local sugerido para novas pastas: não move pastas existentes nem escolhe o destino na nuvem." }
+      NumericSetting {
+        title: "Guardar versões locais anteriores (dias)"
+        hint: "Retenção de arquivos locais que a sincronização substituiu ou apagou. Não é um histórico completo da nuvem."
+        settingKey: "backup_days"; minimum: 1; maximum: 365; fallback: 30
+      }
+    }
+
     BorderSurface {
+      visible: root.activeSection === "advanced"
       Layout.fillWidth: true
       implicitHeight: engCol.implicitHeight + Style.space(20)
       radius: Style.cornerRadius
-      color: Qt.rgba(1, 1, 1, 0.03)
-      borderSpec: Border.controlSpec("normal", root.foreground, Color.accent)
+      color: Commons.Util.alpha(root.foreground, 0.03)
+      borderSpec: Border.controlSpec("normal", root.foreground, Commons.Color.accent)
 
       ColumnLayout {
         id: engCol
@@ -303,7 +522,7 @@ Item {
         }
         spacing: Style.space(6)
 
-        Label { text: "Engine" }
+        Label { text: "Motor e ferramentas" }
 
         Text {
           Layout.fillWidth: true
@@ -313,7 +532,7 @@ Item {
                 : "Background service not connected"
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption - Style.space(1)
-          color: root.service.ready ? Color.accent : Color.urgent
+          color: root.service.ready ? Commons.Color.accent : Commons.Color.urgent
           wrapMode: Text.WordWrap
         }
 
@@ -323,26 +542,26 @@ Item {
           spacing: Style.space(6)
 
           EngineAction {
-            text: "Restart"
+            text: "Reiniciar"
             iconText: "󰑐"
             tooltipText: "Restart rclone: drives mount again and syncs resume"
-            enabled: root.service.connected
+            enabled: root.service.ready && !root.service.busy
             onClicked: root.service.restartEngine()
           }
 
           EngineAction {
-            text: "Log"
+            text: "Logs"
             iconText: "󰈙"
             tooltipText: "What CloudKit and rclone did recently"
-            enabled: root.service.connected
+            enabled: root.service.ready
             onClicked: root.logRequested()
           }
 
           EngineAction {
-            text: "Filters"
+            text: "Filtros"
             iconText: "󰈲"
             tooltipText: "Files that are never synced, by any folder without its own list. Changing them makes the next syncs safe resyncs."
-            enabled: root.service.connected
+            enabled: root.service.ready
             active: root.editingFilters
             onClicked: root.editingFilters ? (root.editingFilters = false) : root.openFilters()
           }
@@ -419,7 +638,7 @@ Item {
             text: Model.filterChangeText(filterEditor.added.length, filterEditor.removed.length, "", false)
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption - Style.space(2)
-            color: Color.accent
+            color: Commons.Color.accent
             wrapMode: Text.WordWrap
           }
 

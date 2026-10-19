@@ -67,7 +67,15 @@ class Sandbox:
                 }
             )
         )
+        stubs = self.tmp / "stubs"
+        stubs.mkdir()
+        self.notification_log = self.tmp / "notification-argv.jsonl"
+        notifier = stubs / "notify-send"
+        notifier.write_text("#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n"
+                            + f"with Path({str(self.notification_log)!r}).open('a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        notifier.chmod(0o755)
         self.env = dict(os.environ)
+        self.env["PATH"] = f"{stubs}:{self.env['PATH']}"
         self.env.update(
             {
                 "XDG_CONFIG_HOME": str(self.tmp / "cfg"),
@@ -952,6 +960,8 @@ SCENARIOS = [
 
 
 def test_account_removal_preserves_local_files(sb: Sandbox) -> None:
+    # Removing this account must not invalidate the VFS of another mounted one.
+    sb.ok("stream", remote="CloudA", on=True)
     cloud = sb.remote_b / "account-test"
     cloud.mkdir(exist_ok=True)
     (cloud / "keep.md").write_text("preserved after removing account\n")
@@ -1004,8 +1014,62 @@ def test_global_power_stops_mounts_and_preserves_preferences(sb: Sandbox) -> Non
     wait(lambda: sb.drive("CloudA")["mounted"], 20, "mount preference restored")
 
 
+def test_settings_parallelism_and_duration(sb: Sandbox) -> None:
+    original = sb.state()["settings"]
+    updates = {"sync_transfers": 8, "sync_checkers": 16, "max_parallel_syncs": 1,
+               "cache_max_age": "7d", "cache_min_free_gb": 0}
+    for key, value in updates.items():
+        sb.ok("set_setting", key=key, value=value)
+        assert sb.state()["settings"][key] == value
+    for key, value in {"sync_transfers": 0, "sync_checkers": 65, "max_parallel_syncs": 9,
+                       "cache_max_age": "not a duration"}.items():
+        response = sb.request("set_setting", key=key, value=value)
+        assert not response["ok"], response
+        assert sb.state()["settings"][key] == updates[key]
+    remote = sb.remote_a / "settings-test"
+    remote.mkdir(exist_ok=True)
+    for n in range(12):
+        (remote / f"file-{n}.txt").write_text(f"settings {n}\n")
+    folder = sb.ok("add_folder", remote="CloudA", path="settings-test")
+    fid = folder["id"]
+    wait(lambda: sb.folder(fid)["state"] == "synced", 20, "sync with edited parallelism")
+    local = Path(sb.folder(fid)["local"])
+    for n in range(12):
+        assert (local / f"file-{n}.txt").read_text() == f"settings {n}\n"
+    sb.ok("remove_folder", id=fid)
+    for key in updates:
+        sb.ok("set_setting", key=key, value=original[key])
+
+
+def test_notification_privacy(sb: Sandbox) -> None:
+    cloud = sb.remote_a / "private-notification-test"
+    cloud.mkdir(exist_ok=True)
+    for name in ("private-note.md", "anchor1.md", "anchor2.md"):
+        (cloud / name).write_text("base\n")
+    data = sb.ok("add_folder", remote="CloudA", path="private-notification-test")
+    fid, local = data["id"], Path(data["local"])
+    wait(lambda: sb.folder(fid)["state"] == "synced", 20, "privacy test initialized")
+    previous = sb.state()["settings"]["notifications"]
+    sb.ok("set_setting", key="notifications", value=True)
+    try:
+        (cloud / "private-note.md").write_text("cloud version\n")
+        time.sleep(1.2)
+        (local / "private-note.md").write_text("local version\n")
+        wait(lambda: sb.folder(fid)["conflictCount"] > 0, 30, "private conflict recorded in panel")
+        wait(lambda: sb.notification_log.exists() and "Open CloudKit" in sb.notification_log.read_text(),
+             10, "generic desktop notification")
+        arguments = sb.notification_log.read_text()
+        assert "private-note" not in arguments and "private-notification-test" not in arguments, arguments
+        assert str(local) not in arguments, arguments
+        assert (local / "private-note.conflict1.md").exists(), "conflict details and copies must remain available"
+    finally:
+        sb.ok("set_setting", key="notifications", value=previous)
+    sb.ok("remove_folder", id=fid)
+
+
 SCENARIOS.extend([test_renamed_directory_stays_watched, test_account_removal_preserves_local_files,
-                  test_global_power_stops_mounts_and_preserves_preferences])
+                  test_global_power_stops_mounts_and_preserves_preferences, test_settings_parallelism_and_duration,
+                  test_notification_privacy])
 
 
 def main() -> int:

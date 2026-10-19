@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+- Follow the live Omarchy bar palette instead of forcing a white cloud icon.
+- Organize settings into six sections with direct local/cloud folder mappings,
+  existing folder controls, per-account streaming and optional login service.
+- Expose cache age and free-space reserve, preserving zero-valued limits.
+- Add validated transfer/checker counts and concurrent folder limits, applied
+  to future sync jobs without cancelling active transfers.
+- Add QML settings interaction/theme coverage and real-rclone settings tests.
+- Keep private filenames and error details out of notification process arguments.
+- Preserve VFS lookup for other mounted accounts when removing an account, and
+  send the supported string parameter when refreshing the streaming cache.
+
 ## 0.2.0
 
 - Turn the Cloud Drives switch into persistent global power control, including

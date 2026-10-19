@@ -188,7 +188,7 @@ impl Core {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         for id in ids {
-            if self.syncs.len() >= 3 {
+            if self.syncs.len() >= self.m.cfg["max_parallel_syncs"].as_u64().unwrap_or(3) as usize {
                 break;
             }
             let f = &self.m.folders[&id];
@@ -223,7 +223,11 @@ impl Core {
             f["job_id"] = json!(-1);
             f["dirty_since"] = json!(0);
             f["dirty_during_run"] = json!(false);
-            let folder = f.clone();
+            let mut folder = f.clone();
+            folder["transfer_options"] = json!({
+                "Transfers": self.m.cfg["sync_transfers"].as_u64().unwrap_or(4),
+                "Checkers": self.m.cfg["sync_checkers"].as_u64().unwrap_or(8),
+            });
             f["force_next"] = json!(false);
             let paths = self.m.paths.clone();
             let tx = self.tx.clone();
@@ -271,7 +275,7 @@ impl Core {
                 );
                 if !name.is_empty() && !conflicts.contains(&json!(name)) {
                     conflicts.insert(0, json!(name));
-                    jobs::notify(&self.m.cfg, "Sync conflict; both versions kept", &name);
+                    jobs::notify(&self.m.cfg, jobs::Notification::Conflict);
                 }
             }
         }
@@ -402,7 +406,7 @@ impl Core {
             if let Some((code, message)) = attention {
                 f["attention_code"] = json!(code);
                 f["attention"] = json!(message);
-                jobs::notify(&self.m.cfg, "Cloud folder needs attention", &message);
+                jobs::notify(&self.m.cfg, jobs::Notification::Attention);
             }
             log(
                 &self.m.paths,
@@ -1302,7 +1306,9 @@ impl Core {
                 }
                 let rcc = self.rc.clone().ok_or("rclone is not ready")?;
                 rcc.call("config/delete", json!({"name":name})).await?;
-                let _ = rcc.call("fscache/clear", json!({})).await;
+                // Clearing every cached filesystem here invalidates VFS lookup
+                // for other accounts that are still mounted. The removed remote
+                // is no longer addressable through the model; keep active caches.
                 self.m.cfg["remotes"].as_object_mut().unwrap().remove(&name);
                 self.m.saved["quota"].as_object_mut().unwrap().remove(&name);
                 self.m.save()?;
